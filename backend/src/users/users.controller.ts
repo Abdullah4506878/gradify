@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,10 +10,14 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -50,6 +55,26 @@ export class UsersController {
       role,
       universityId: universityId ? parseInt(universityId, 10) : undefined,
     });
+  }
+
+  @Post('import')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file.originalname.match(/\.csv$/i)) {
+          return cb(new BadRequestException('Only .csv files are accepted'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  importUsers(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.usersService.importFromCsv(file.buffer);
   }
 
   @Post()
