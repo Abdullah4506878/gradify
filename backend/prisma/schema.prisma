@@ -39,6 +39,11 @@ enum EnrollmentStatus {
   REPEATING
 }
 
+enum MOMStatus {
+  DRAFT
+  SUBMITTED
+}
+
 model User {
   id                    Int                    @id @default(autoincrement())
   email                 String                 @unique
@@ -53,6 +58,7 @@ model User {
   ledGroups             Group[]                @relation("GroupLeader")
   enrollments           Enrollment[]
   supervisorPreferences SupervisorPreference[] @relation("SupervisorPreference")
+  supervisedMOMs        MeetingMinutes[]       @relation("SupervisorMOM")
 }
 
 model University {
@@ -118,18 +124,19 @@ model FYPPhase {
 }
 
 model Group {
-  id           Int                    @id @default(autoincrement())
-  fypId        String                 @unique
-  universityId Int
-  phaseId      Int
-  leaderId     Int
-  status       GroupStatus            @default(FORMING)
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
-  phase        FYPPhase               @relation(fields: [phaseId], references: [id])
-  leader       User                   @relation("GroupLeader", fields: [leaderId], references: [id])
-  members      Enrollment[]
-  preferences  SupervisorPreference[]
+  id             Int                    @id @default(autoincrement())
+  fypId          String                 @unique
+  universityId   Int
+  phaseId        Int
+  leaderId       Int
+  status         GroupStatus            @default(FORMING)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  phase          FYPPhase               @relation(fields: [phaseId], references: [id])
+  leader         User                   @relation("GroupLeader", fields: [leaderId], references: [id])
+  members        Enrollment[]
+  preferences    SupervisorPreference[]
+  meetingMinutes MeetingMinutes[]
 }
 
 model Enrollment {
@@ -155,4 +162,22 @@ model SupervisorPreference {
   supervisor   User     @relation("SupervisorPreference", fields: [supervisorId], references: [id])
 
   @@unique([groupId, preference])
+}
+
+model MeetingMinutes {
+  id           Int       @id @default(autoincrement())
+  groupId      Int
+  supervisorId Int
+  meetingDate  DateTime
+  agenda       String
+  discussion   String
+  decisions    String
+  nextSteps    String?
+  attendees    String
+  status       MOMStatus @default(DRAFT)
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  group        Group     @relation(fields: [groupId], references: [id])
+  supervisor   User      @relation("SupervisorMOM", fields: [supervisorId], references: [id])
 }

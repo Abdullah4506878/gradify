@@ -48,6 +48,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.supervisorPreference;
   }
 
+  get meetingMinutes() {
+    return this.client.meetingMinutes;
+  }
+
   async onModuleInit(): Promise<void> {
     await this.client.$connect();
   }
