@@ -44,6 +44,20 @@ enum MOMStatus {
   SUBMITTED
 }
 
+enum TaskType {
+  DOCUMENTATION
+  DEVELOPMENT_WEB
+  DEVELOPMENT_MOBILE
+}
+
+enum TaskStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ACCEPTED_MINOR_ISSUES
+}
+
 model User {
   id                    Int                    @id @default(autoincrement())
   email                 String                 @unique
@@ -59,6 +73,9 @@ model User {
   enrollments           Enrollment[]
   supervisorPreferences SupervisorPreference[] @relation("SupervisorPreference")
   supervisedMOMs        MeetingMinutes[]       @relation("SupervisorMOM")
+  assignedTasks         Task[]                 @relation("TaskAssignee")
+  supervisedTasks       Task[]                 @relation("TaskSupervisor")
+  taskReviews           TaskReview[]           @relation("TaskReviewer")
 }
 
 model University {
@@ -137,6 +154,7 @@ model Group {
   members        Enrollment[]
   preferences    SupervisorPreference[]
   meetingMinutes MeetingMinutes[]
+  tasks          Task[]
 }
 
 model Enrollment {
@@ -180,4 +198,44 @@ model MeetingMinutes {
   updatedAt    DateTime  @updatedAt
   group        Group     @relation(fields: [groupId], references: [id])
   supervisor   User      @relation("SupervisorMOM", fields: [supervisorId], references: [id])
+}
+
+model Task {
+  id           Int             @id @default(autoincrement())
+  groupId      Int
+  assignedToId Int
+  supervisorId Int
+  title        String
+  description  String?
+  type         TaskType
+  deadline     DateTime
+  status       TaskStatus      @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  group        Group           @relation(fields: [groupId], references: [id])
+  assignedTo   User            @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  supervisor   User            @relation("TaskSupervisor", fields: [supervisorId], references: [id])
+  submission   TaskSubmission?
+  review       TaskReview?
+}
+
+model TaskSubmission {
+  id          Int      @id @default(autoincrement())
+  taskId      Int      @unique
+  description String
+  fileUrl     String?
+  githubUrl   String?
+  submittedAt DateTime @default(now())
+  task        Task     @relation(fields: [taskId], references: [id])
+}
+
+model TaskReview {
+  id         Int        @id @default(autoincrement())
+  taskId     Int        @unique
+  reviewedBy Int
+  status     TaskStatus
+  reason     String
+  reviewedAt DateTime   @default(now())
+  task       Task       @relation(fields: [taskId], references: [id])
+  reviewer   User       @relation("TaskReviewer", fields: [reviewedBy], references: [id])
 }

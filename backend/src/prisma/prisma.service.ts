@@ -52,6 +52,18 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.meetingMinutes;
   }
 
+  get task() {
+    return this.client.task;
+  }
+
+  get taskSubmission() {
+    return this.client.taskSubmission;
+  }
+
+  get taskReview() {
+    return this.client.taskReview;
+  }
+
   async onModuleInit(): Promise<void> {
     await this.client.$connect();
   }
