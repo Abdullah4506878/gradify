@@ -5,6 +5,7 @@ import { AcademicSessionModule } from './academic-session/academic-session.modul
 import { AuthModule } from './auth/auth.module';
 import { DepartmentModule } from './department/department.module';
 import { FypPhaseModule } from './fyp-phase/fyp-phase.module';
+import { GroupsModule } from './groups/groups.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProgramModule } from './program/program.module';
 import { UniversityModule } from './university/university.module';
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module';
     ProgramModule,
     AcademicSessionModule,
     FypPhaseModule,
+    GroupsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

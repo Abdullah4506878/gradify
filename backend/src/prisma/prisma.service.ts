@@ -36,6 +36,18 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.fYPPhase;
   }
 
+  get group() {
+    return this.client.group;
+  }
+
+  get enrollment() {
+    return this.client.enrollment;
+  }
+
+  get supervisorPreference() {
+    return this.client.supervisorPreference;
+  }
+
   async onModuleInit(): Promise<void> {
     await this.client.$connect();
   }

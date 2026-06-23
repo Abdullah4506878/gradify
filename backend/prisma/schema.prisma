@@ -26,17 +26,33 @@ enum Phase {
   FYP_2
 }
 
+enum GroupStatus {
+  FORMING
+  ACTIVE
+  COMPLETED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PASSED
+  FAILED
+  REPEATING
+}
+
 model User {
-  id           Int         @id @default(autoincrement())
-  email        String      @unique
-  name         String?
-  password     String
-  role         Role        @default(STUDENT)
-  refreshToken String?
-  universityId Int?
-  university   University? @relation(fields: [universityId], references: [id])
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                    Int                    @id @default(autoincrement())
+  email                 String                 @unique
+  name                  String?
+  password              String
+  role                  Role                   @default(STUDENT)
+  refreshToken          String?
+  universityId          Int?
+  university            University?            @relation(fields: [universityId], references: [id])
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  ledGroups             Group[]                @relation("GroupLeader")
+  enrollments           Enrollment[]
+  supervisorPreferences SupervisorPreference[] @relation("SupervisorPreference")
 }
 
 model University {
@@ -96,6 +112,47 @@ model FYPPhase {
   session   AcademicSession @relation(fields: [sessionId], references: [id])
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
+  groups    Group[]
 
   @@unique([phase, sessionId])
+}
+
+model Group {
+  id           Int                    @id @default(autoincrement())
+  fypId        String                 @unique
+  universityId Int
+  phaseId      Int
+  leaderId     Int
+  status       GroupStatus            @default(FORMING)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  phase        FYPPhase               @relation(fields: [phaseId], references: [id])
+  leader       User                   @relation("GroupLeader", fields: [leaderId], references: [id])
+  members      Enrollment[]
+  preferences  SupervisorPreference[]
+}
+
+model Enrollment {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  groupId   Int
+  status    EnrollmentStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id])
+  group     Group            @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+}
+
+model SupervisorPreference {
+  id           Int      @id @default(autoincrement())
+  groupId      Int
+  supervisorId Int
+  preference   Int
+  createdAt    DateTime @default(now())
+  group        Group    @relation(fields: [groupId], references: [id])
+  supervisor   User     @relation("SupervisorPreference", fields: [supervisorId], references: [id])
+
+  @@unique([groupId, preference])
 }
