@@ -9,7 +9,7 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   const hash = await bcrypt.hash('Test@123', 12);
   const user = await prisma.user.update({
-    where: { email: 'tayyab.khushi@superior.edu.pk' },
+    where: { email: 'ahmad.malik@superior.edu.pk' },
     data: { password: hash }
   });
   console.log('Password updated:', user.email);
