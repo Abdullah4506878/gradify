@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,13 +15,87 @@ enum Role {
   STUDENT
 }
 
+enum Semester {
+  FALL
+  SPRING
+  SUMMER
+}
+
+enum Phase {
+  FYP_1
+  FYP_2
+}
+
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
+  id           Int         @id @default(autoincrement())
+  email        String      @unique
   name         String?
   password     String
-  role         Role     @default(STUDENT)
+  role         Role        @default(STUDENT)
   refreshToken String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  universityId Int?
+  university   University? @relation(fields: [universityId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model University {
+  id          Int          @id @default(autoincrement())
+  name        String
+  code        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  departments Department[]
+  users       User[]
+}
+
+model Department {
+  id           Int        @id @default(autoincrement())
+  name         String
+  code         String
+  universityId Int
+  university   University @relation(fields: [universityId], references: [id])
+  programs     Program[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([code, universityId])
+}
+
+model Program {
+  id           Int               @id @default(autoincrement())
+  name         String
+  code         String
+  departmentId Int
+  department   Department        @relation(fields: [departmentId], references: [id])
+  sessions     AcademicSession[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([code, departmentId])
+}
+
+model AcademicSession {
+  id        Int        @id @default(autoincrement())
+  name      String
+  semester  Semester
+  year      Int
+  programId Int
+  program   Program    @relation(fields: [programId], references: [id])
+  phases    FYPPhase[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([semester, year, programId])
+}
+
+model FYPPhase {
+  id        Int             @id @default(autoincrement())
+  phase     Phase
+  sessionId Int
+  session   AcademicSession @relation(fields: [sessionId], references: [id])
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([phase, sessionId])
 }
