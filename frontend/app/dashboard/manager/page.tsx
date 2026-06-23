@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuthStore } from '@/lib/auth';
+import api from '@/lib/api';
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
@@ -23,37 +24,6 @@ const navItems = [
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
 ];
 
-const statCards = [
-  {
-    label: 'Total Groups',
-    value: 0,
-    icon: FolderOpen,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-  },
-  {
-    label: 'Total Students',
-    value: 0,
-    icon: Users,
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-  },
-  {
-    label: 'Total Supervisors',
-    value: 0,
-    icon: Briefcase,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-  },
-  {
-    label: 'Pending Assignments',
-    value: 0,
-    icon: Clock,
-    color: 'text-orange-600',
-    bg: 'bg-orange-50',
-  },
-];
-
 const today = new Date().toLocaleDateString('en-US', {
   weekday: 'long',
   year: 'numeric',
@@ -61,10 +31,26 @@ const today = new Date().toLocaleDateString('en-US', {
   day: 'numeric',
 });
 
+interface Stats {
+  totalGroups: number;
+  totalStudents: number;
+  totalSupervisors: number;
+  pendingAssignments: number;
+}
+
 export default function ManagerDashboard() {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
 
+  const [stats, setStats] = useState<Stats>({
+    totalGroups: 0,
+    totalStudents: 0,
+    totalSupervisors: 0,
+    pendingAssignments: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Auth guard
   useEffect(() => {
     const stored =
       token ?? (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
@@ -72,6 +58,69 @@ export default function ManagerDashboard() {
       router.replace('/login');
     }
   }, [token, router]);
+
+  // Fetch stats
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const [studentsRes, supervisorsRes, groupsRes] = await Promise.allSettled([
+          api.get<{ id: number }[]>('/users', { params: { role: 'STUDENT' } }),
+          api.get<{ id: number }[]>('/users', { params: { role: 'SUPERVISOR' } }),
+          api.get<{ id: number; preferences: unknown[] }[]>('/groups'),
+        ]);
+
+        const totalStudents =
+          studentsRes.status === 'fulfilled' ? studentsRes.value.data.length : 0;
+        const totalSupervisors =
+          supervisorsRes.status === 'fulfilled' ? supervisorsRes.value.data.length : 0;
+        const groups =
+          groupsRes.status === 'fulfilled' ? groupsRes.value.data : [];
+        const totalGroups = groups.length;
+        const pendingAssignments = groups.filter(
+          (g) => !g.preferences || g.preferences.length === 0,
+        ).length;
+
+        setStats({ totalGroups, totalStudents, totalSupervisors, pendingAssignments });
+      } catch {
+        // keep zeros on unexpected failure
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchStats();
+  }, []);
+
+  const statCards = [
+    {
+      label: 'Total Groups',
+      value: stats.totalGroups,
+      icon: FolderOpen,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+    },
+    {
+      label: 'Total Students',
+      value: stats.totalStudents,
+      icon: Users,
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+    },
+    {
+      label: 'Total Supervisors',
+      value: stats.totalSupervisors,
+      icon: Briefcase,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+    },
+    {
+      label: 'Pending Assignments',
+      value: stats.pendingAssignments,
+      icon: Clock,
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
+    },
+  ];
 
   return (
     <DashboardLayout navItems={navItems}>
@@ -89,7 +138,11 @@ export default function ManagerDashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-500">{label}</p>
-                  <p className="mt-1.5 text-3xl font-bold text-gray-900">{value}</p>
+                  {loading ? (
+                    <div className="mt-2 h-8 w-16 animate-pulse rounded-md bg-gray-200" />
+                  ) : (
+                    <p className="mt-1.5 text-3xl font-bold text-gray-900">{value}</p>
+                  )}
                 </div>
                 <div className={`rounded-xl p-2.5 ${bg} shrink-0`}>
                   <Icon className={`h-5 w-5 ${color}`} strokeWidth={1.75} />
@@ -110,7 +163,9 @@ export default function ManagerDashboard() {
             <Activity className="h-5 w-5 text-gray-300" strokeWidth={1.75} />
           </div>
           <p className="text-sm font-medium text-gray-500">No recent activity yet</p>
-          <p className="mt-1 text-xs text-gray-400">Activity will appear here as you manage your FYP program.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Activity will appear here as you manage your FYP program.
+          </p>
         </div>
       </div>
     </DashboardLayout>
