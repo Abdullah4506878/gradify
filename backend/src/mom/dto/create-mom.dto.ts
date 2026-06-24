@@ -1,30 +1,26 @@
-import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateMomDto {
-  @IsInt()
-  @IsPositive()
+  @IsNotEmpty()
   groupId: number;
 
-  @IsDateString()
-  meetingDate: string;
-
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   agenda: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   discussion: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   decisions: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   nextSteps?: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   attendees: string;
 }

@@ -83,6 +83,7 @@ model User {
   assignedTasks         Task[]                 @relation("TaskAssignee")
   supervisedTasks       Task[]                 @relation("TaskSupervisor")
   taskReviews           TaskReview[]           @relation("TaskReviewer")
+  notifications         Notification[]
 }
 
 model University {
@@ -260,4 +261,16 @@ model Proposal {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   group              Group          @relation(fields: [groupId], references: [id])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }

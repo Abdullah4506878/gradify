@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { MOMStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateMomDto } from './dto/create-mom.dto';
 import { UpdateMomDto } from './dto/update-mom.dto';
 
@@ -15,19 +16,22 @@ const MOM_INCLUDE = {
 
 @Injectable()
 export class MomService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   create(supervisorId: number, dto: CreateMomDto) {
     return this.prisma.meetingMinutes.create({
       data: {
         supervisorId,
         groupId: dto.groupId,
-        meetingDate: new Date(dto.meetingDate),
+        meetingDate: new Date(),
         agenda: dto.agenda,
         discussion: dto.discussion,
         decisions: dto.decisions,
         nextSteps: dto.nextSteps,
-        attendees: dto.attendees,
+        attendees: dto.attendees ?? '',
       },
       include: MOM_INCLUDE,
     });
@@ -91,7 +95,7 @@ export class MomService {
       throw new ForbiddenException('This MOM has already been submitted');
     }
 
-    return this.prisma.meetingMinutes.update({
+    const updated = await this.prisma.meetingMinutes.update({
       where: { id },
       data: {
         status: MOMStatus.SUBMITTED,
@@ -99,5 +103,29 @@ export class MomService {
       },
       include: MOM_INCLUDE,
     });
+
+    // Notify managers in the same university as the supervisor
+    const supervisor = await this.prisma.user.findUnique({
+      where: { id: supervisorId },
+      select: { universityId: true },
+    });
+    if (supervisor?.universityId) {
+      const managers = await this.prisma.user.findMany({
+        where: { role: Role.MANAGER, universityId: supervisor.universityId },
+        select: { id: true },
+      });
+      const managerIds = managers.map((m) => m.id);
+      if (managerIds.length > 0) {
+        this.notificationService.createMany(
+          managerIds,
+          'MOM Submitted',
+          `Supervisor has submitted minutes of meeting for group ${mom.group?.fypId ?? `#${mom.groupId}`}`,
+          'MOM',
+          '/dashboard/manager/proposals',
+        ).catch(() => {});
+      }
+    }
+
+    return updated;
   }
 }

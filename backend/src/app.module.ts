@@ -7,6 +7,7 @@ import { DepartmentModule } from './department/department.module';
 import { FypPhaseModule } from './fyp-phase/fyp-phase.module';
 import { GroupsModule } from './groups/groups.module';
 import { MomModule } from './mom/mom.module';
+import { NotificationModule } from './notification/notification.module';
 import { ProposalModule } from './proposal/proposal.module';
 import { TasksModule } from './tasks/tasks.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module';
     MomModule,
     TasksModule,
     ProposalModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

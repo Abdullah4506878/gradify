@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Role, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ReviewTaskDto } from './dto/review-task.dto';
 import { SubmitTaskDto } from './dto/submit-task.dto';
@@ -23,10 +24,13 @@ const TASK_INCLUDE = {
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-  create(supervisorId: number, dto: CreateTaskDto) {
-    return this.prisma.task.create({
+  async create(supervisorId: number, dto: CreateTaskDto) {
+    const task = await this.prisma.task.create({
       data: {
         supervisorId,
         groupId: dto.groupId,
@@ -38,6 +42,24 @@ export class TasksService {
       },
       include: TASK_INCLUDE,
     });
+
+    // Notify all group members
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { groupId: dto.groupId },
+      select: { userId: true },
+    });
+    const memberIds = enrollments.map((e) => e.userId);
+    if (memberIds.length > 0) {
+      this.notificationService.createMany(
+        memberIds,
+        'New Task Assigned',
+        `New task "${task.title}" has been assigned to your group`,
+        'TASK',
+        '/dashboard/student/tasks',
+      ).catch(() => {});
+    }
+
+    return task;
   }
 
   findAll(user: { id: number; role: Role }) {

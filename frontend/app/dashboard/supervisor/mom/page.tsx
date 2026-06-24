@@ -11,6 +11,7 @@ import {
   FileText,
   Search,
   PlusCircle,
+  ClipboardCheck,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
@@ -18,7 +19,7 @@ import api from '@/lib/api';
 const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
-  { label: 'MOMs', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Minutes of Meeting', href: '/dashboard/supervisor/mom', icon: FileText },
   { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
@@ -45,11 +46,11 @@ const STATUS_STYLES: Record<MOMStatus, { label: string; className: string }> = {
 function SkeletonRow() {
   return (
     <tr className="border-b border-gray-100">
-      {[1, 2, 3, 4, 5].map((i) => (
+      {[1, 2, 3, 4, 5, 6].map((i) => (
         <td key={i} className="px-6 py-4">
           <div
             className="h-4 animate-pulse rounded bg-gray-200"
-            style={{ width: i === 5 ? '7rem' : '60%' }}
+            style={{ width: i === 1 ? '2rem' : i === 6 ? '7rem' : '60%' }}
           />
         </td>
       ))}
@@ -125,8 +126,8 @@ export default function MOMListPage() {
             {loading
               ? 'Loading…'
               : groupIdFilter
-              ? `${moms.length} MOM${moms.length !== 1 ? 's' : ''} for this group`
-              : `${moms.length} MOM${moms.length !== 1 ? 's' : ''} recorded`}
+              ? `${moms.length} minute${moms.length !== 1 ? 's' : ''} of meeting for this group`
+              : `${moms.length} minute${moms.length !== 1 ? 's' : ''} of meeting recorded`}
           </p>
         </div>
         <Link
@@ -134,7 +135,7 @@ export default function MOMListPage() {
           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors shrink-0"
         >
           <PlusCircle className="h-4 w-4" strokeWidth={1.75} />
-          Create MOM
+          New MOM
         </Link>
       </div>
 
@@ -171,6 +172,9 @@ export default function MOMListPage() {
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">
+              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-12">
+                #
+              </th>
               <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Group
               </th>
@@ -194,29 +198,30 @@ export default function MOMListPage() {
               Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="flex flex-col items-center justify-center py-16 px-6">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 mb-3">
                       <FileText className="h-5 w-5 text-gray-300" strokeWidth={1.75} />
                     </div>
                     <p className="text-sm font-medium text-gray-500">
-                      {search ? 'No MOMs match your search' : 'No meetings recorded yet'}
+                      {search ? 'No minutes of meeting match your search' : 'No meetings recorded yet'}
                     </p>
                     <p className="mt-1 text-xs text-gray-400">
                       {search
                         ? 'Try a different FYP ID or agenda.'
-                        : 'Create a MOM to get started.'}
+                        : 'Create a minutes of meeting record to get started.'}
                     </p>
                   </div>
                 </td>
               </tr>
             ) : (
-              filtered.map((mom) => {
+              filtered.map((mom, idx) => {
                 const statusStyle = STATUS_STYLES[mom.status] ?? STATUS_STYLES.DRAFT;
                 const agendaTrunc =
                   mom.agenda.length > 50 ? mom.agenda.slice(0, 50) + '…' : mom.agenda;
                 return (
                   <tr key={mom.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 text-sm text-gray-400 tabular-nums">{idx + 1}</td>
                     <td className="px-6 py-4">
                       <span className="font-mono text-sm font-medium text-gray-900">
                         {mom.group?.fypId ?? `Group #${mom.groupId}`}

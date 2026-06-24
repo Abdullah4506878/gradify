@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { ProposalStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { ManagerReviewProposalDto, ReviewProposalDto } from './dto/review-proposal.dto';
 
@@ -21,7 +22,10 @@ const PROPOSAL_INCLUDE = {
 
 @Injectable()
 export class ProposalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async create(dto: CreateProposalDto) {
     const group = await this.prisma.group.findUnique({ where: { id: dto.groupId } });
@@ -30,7 +34,7 @@ export class ProposalService {
     const existing = await this.prisma.proposal.findUnique({ where: { groupId: dto.groupId } });
     if (existing) throw new ConflictException('A proposal for this group already exists');
 
-    return this.prisma.proposal.create({
+    const proposal = await this.prisma.proposal.create({
       data: {
         groupId: dto.groupId,
         projectTitle: dto.projectTitle,
@@ -39,6 +43,22 @@ export class ProposalService {
       },
       include: PROPOSAL_INCLUDE,
     });
+
+    // Notify P1 supervisor preference
+    const p1 = await this.prisma.supervisorPreference.findFirst({
+      where: { groupId: dto.groupId, preference: 1 },
+    });
+    if (p1) {
+      this.notificationService.createNotification(
+        p1.supervisorId,
+        'New Proposal Submitted',
+        `Group ${group.fypId} has submitted their project idea for review`,
+        'PROPOSAL',
+        '/dashboard/supervisor/proposals',
+      ).catch(() => {});
+    }
+
+    return proposal;
   }
 
   findAll() {
@@ -75,13 +95,13 @@ export class ProposalService {
   }
 
   async review(id: number, userId: number, role: Role, dto: ReviewProposalDto) {
-    await this.findOne(id);
+    const proposal = await this.findOne(id);
 
     if (role !== Role.SUPERVISOR && role !== Role.MANAGER) {
       throw new ForbiddenException('Only supervisors and managers can review proposals');
     }
 
-    return this.prisma.proposal.update({
+    const updated = await this.prisma.proposal.update({
       where: { id },
       data: {
         status: dto.status,
@@ -89,6 +109,32 @@ export class ProposalService {
       },
       include: PROPOSAL_INCLUDE,
     });
+
+    // Notify all group members on approval or rejection
+    if (dto.status === ProposalStatus.APPROVED || dto.status === ProposalStatus.REJECTED) {
+      const enrollments = await this.prisma.enrollment.findMany({
+        where: { groupId: proposal.group.id },
+        select: { userId: true },
+      });
+      const memberIds = [
+        ...new Set([
+          ...enrollments.map((e) => e.userId),
+          proposal.group.leader.id,
+        ]),
+      ];
+
+      this.notificationService.createMany(
+        memberIds,
+        dto.status === ProposalStatus.APPROVED ? 'Proposal Approved ✓' : 'Proposal Needs Revision',
+        dto.status === ProposalStatus.APPROVED
+          ? 'Your project idea has been approved by your supervisor'
+          : 'Your supervisor has requested changes to your proposal',
+        'PROPOSAL_REVIEW',
+        '/dashboard/student/proposal',
+      ).catch(() => {});
+    }
+
+    return updated;
   }
 
   async managerReview(id: number, dto: ManagerReviewProposalDto) {
