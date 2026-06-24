@@ -1,30 +1,47 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   LayoutDashboard,
   FolderOpen,
   Calendar,
   User,
   Search,
+  FileText,
+  PlusCircle,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
+  { label: 'MOMs', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
 ];
 
 type GroupStatus = 'FORMING' | 'ACTIVE' | 'COMPLETED';
 
+interface Member {
+  id: number;
+  userId: number;
+  user: { id: number; name: string | null; email: string } | null;
+}
+
 interface Group {
   id: number;
   fypId: string;
   status: GroupStatus;
-  members: unknown[];
+  members: Member[];
 }
 
 interface MOM {
@@ -59,6 +76,7 @@ export default function SupervisorGroupsPage() {
   const [lastMomDate, setLastMomDate] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [viewGroup, setViewGroup] = useState<Group | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -73,7 +91,6 @@ export default function SupervisorGroupsPage() {
 
         const moms = momsRes.status === 'fulfilled' ? momsRes.value.data : [];
 
-        // Build map: groupId → most recent meetingDate (already ordered desc by API)
         const momMap: Record<number, string> = {};
         for (const mom of moms) {
           if (!momMap[mom.groupId]) {
@@ -205,6 +222,7 @@ export default function SupervisorGroupsPage() {
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
+                        onClick={() => setViewGroup(group)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                       >
                         View
@@ -217,6 +235,99 @@ export default function SupervisorGroupsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* View Group Dialog */}
+      <Dialog open={!!viewGroup} onOpenChange={(open) => { if (!open) setViewGroup(null); }}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Group Details</DialogTitle>
+          </DialogHeader>
+
+          {viewGroup && (() => {
+            const status = STATUS_STYLES[viewGroup.status] ?? STATUS_STYLES.FORMING;
+            const lastMom = lastMomDate[viewGroup.id];
+            return (
+              <div className="pt-2 space-y-5">
+                {/* FYP ID + status */}
+                <div className="flex items-center justify-between">
+                  <p className="text-2xl font-bold font-mono text-indigo-600">{viewGroup.fypId}</p>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}>
+                    {status.label}
+                  </span>
+                </div>
+
+                {/* Members */}
+                <div className="rounded-xl bg-gray-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                    Members ({viewGroup.members.length})
+                  </p>
+                  {viewGroup.members.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No members yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {viewGroup.members.map((m) => (
+                        <li key={m.id} className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-50 shrink-0">
+                            <span className="text-xs font-semibold text-indigo-600">
+                              {(m.user?.name ?? m.user?.email ?? '?').charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-900">
+                              {m.user?.name ?? <span className="italic text-gray-400">No name</span>}
+                            </p>
+                            <p className="text-xs text-gray-400">{m.user?.email}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Last MOM */}
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Last MOM</span>
+                  <span className="text-sm text-gray-600">
+                    {lastMom
+                      ? new Date(lastMom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : <span className="italic text-gray-400">None yet</span>}
+                  </span>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-2">
+                  <Link
+                    href={`/dashboard/supervisor/mom/create?groupId=${viewGroup.id}`}
+                    onClick={() => setViewGroup(null)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    Create MOM
+                  </Link>
+                  <Link
+                    href={`/dashboard/supervisor/mom?groupId=${viewGroup.id}`}
+                    onClick={() => setViewGroup(null)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    View MOMs
+                  </Link>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setViewGroup(null)}
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

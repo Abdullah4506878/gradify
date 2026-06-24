@@ -27,7 +27,7 @@ const GROUP_INCLUDE = {
 export class GroupsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(leaderId: number, dto: CreateGroupDto) {
+  async create(leaderId: number, dto: CreateGroupDto, universityId: number) {
     const existing = await this.prisma.enrollment.findFirst({
       where: { userId: leaderId, group: { phaseId: dto.phaseId } },
     });
@@ -39,7 +39,7 @@ export class GroupsService {
       data: {
         fypId,
         phaseId: dto.phaseId,
-        universityId: dto.universityId,
+        universityId,
         leaderId,
         members: { create: { userId: leaderId } },
       },

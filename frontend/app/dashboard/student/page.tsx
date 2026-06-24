@@ -50,6 +50,14 @@ const TASK_STATUS_STYLES: Record<TaskStatus, { label: string; className: string 
   ACCEPTED_MINOR_ISSUES: { label: 'Minor Issues', className: 'bg-orange-50 text-orange-700' },
 };
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night';
+}
+
 const today = new Date().toLocaleDateString('en-US', {
   weekday: 'long',
   year: 'numeric',
@@ -64,6 +72,7 @@ export default function StudentDashboard() {
   const [myGroup, setMyGroup] = useState<Group | null | undefined>(undefined); // undefined = loading
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -76,10 +85,15 @@ export default function StudentDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [groupsRes, tasksRes] = await Promise.allSettled([
+        const [groupsRes, tasksRes, meRes] = await Promise.allSettled([
           api.get<Group[]>('/groups'),
           api.get<Task[]>('/tasks'),
+          api.get<{ name: string | null }>('/users/me'),
         ]);
+
+        if (meRes.status === 'fulfilled') {
+          setUserName(meRes.value.data.name);
+        }
 
         if (groupsRes.status === 'fulfilled' && user?.id) {
           const found = groupsRes.value.data.find((g) =>
@@ -110,6 +124,11 @@ export default function StudentDashboard() {
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Student Dashboard</h1>
+        {userName !== null && (
+          <p className="mt-1 text-lg text-gray-600 font-medium">
+            {getGreeting()}, {userName} 👋
+          </p>
+        )}
         <p className="mt-1 text-sm text-gray-500">{today}</p>
       </div>
 

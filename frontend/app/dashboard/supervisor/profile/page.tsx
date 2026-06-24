@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import {
@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Calendar,
   User,
+  FileText,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -14,6 +15,8 @@ import api from '@/lib/api';
 const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
+  { label: 'MOMs', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
 ];

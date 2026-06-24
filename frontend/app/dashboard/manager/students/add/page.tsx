@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ const navItems = [
   { label: 'Students', href: '/dashboard/manager/students', icon: Users },
   { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
   { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
+  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
   { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
 ];

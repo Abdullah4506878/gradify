@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -15,6 +16,7 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { UsersService } from '../users/users.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { SupervisorPreferenceDto } from './dto/supervisor-preference.dto';
 import { GroupsService } from './groups.service';
@@ -31,13 +33,20 @@ interface AuthRequest extends Request {
 @UseGuards(JwtAuthGuard)
 @Controller('groups')
 export class GroupsController {
-  constructor(private readonly groupsService: GroupsService) {}
+  constructor(
+    private readonly groupsService: GroupsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.STUDENT)
-  create(@Req() req: AuthRequest, @Body() dto: CreateGroupDto) {
-    return this.groupsService.create(req.user.id, dto);
+  async create(@Req() req: AuthRequest, @Body() dto: CreateGroupDto) {
+    const user = await this.usersService.findById(req.user.id);
+    if (!user || !user.universityId) {
+      throw new BadRequestException('User university not found');
+    }
+    return this.groupsService.create(req.user.id, dto, user.universityId);
   }
 
   @Get()
@@ -53,8 +62,13 @@ export class GroupsController {
   @Post(':id/join')
   @UseGuards(RolesGuard)
   @Roles(Role.STUDENT)
-  join(@Param('id', ParseIntPipe) groupId: number, @Req() req: AuthRequest) {
-    return this.groupsService.joinGroup(groupId, req.user.id);
+  join(
+    @Param('id', ParseIntPipe) groupId: number,
+    @Req() req: AuthRequest,
+    @Body('userId') bodyUserId?: number,
+  ) {
+    const userId = bodyUserId ?? req.user.id;
+    return this.groupsService.joinGroup(groupId, userId);
   }
 
   @Post(':id/preferences')

@@ -4,8 +4,4 @@ export class CreateGroupDto {
   @IsInt()
   @IsPositive()
   phaseId: number;
-
-  @IsInt()
-  @IsPositive()
-  universityId: number;
 }

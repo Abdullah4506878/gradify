@@ -46,7 +46,7 @@ export class UsersController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(Role.MANAGER)
+  @Roles(Role.MANAGER, Role.SUPERVISOR, Role.STUDENT)
   findAll(
     @Query('role') role?: Role,
     @Query('universityId') universityId?: string,

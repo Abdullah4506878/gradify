@@ -58,6 +58,12 @@ enum TaskStatus {
   ACCEPTED_MINOR_ISSUES
 }
 
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                    Int                    @id @default(autoincrement())
   email                 String                 @unique
@@ -156,6 +162,7 @@ model Group {
   preferences    SupervisorPreference[]
   meetingMinutes MeetingMinutes[]
   tasks          Task[]
+  proposal       Proposal?
 }
 
 model Enrollment {
@@ -239,4 +246,18 @@ model TaskReview {
   reviewedAt DateTime   @default(now())
   task       Task       @relation(fields: [taskId], references: [id])
   reviewer   User       @relation("TaskReviewer", fields: [reviewedBy], references: [id])
+}
+
+model Proposal {
+  id                 Int            @id @default(autoincrement())
+  groupId            Int            @unique
+  projectTitle       String
+  problemStatement   String
+  proposedSolution   String
+  supervisorComments String?
+  managerComments    String?
+  status             ProposalStatus @default(PENDING)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  group              Group          @relation(fields: [groupId], references: [id])
 }
