@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Role, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as XLSX from 'xlsx';
 import { isEmail } from 'class-validator';
 import { randomBytes } from 'crypto';
 import { parse } from 'csv-parse/sync';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { CsvUserRow, ImportUsersResult } from './dto/import-users.dto';
+import { FileUserRow, ImportUsersResult } from './dto/import-users.dto';
 import { UpdateMeDto, UpdateUserDto } from './dto/update-user.dto';
 
 const BCRYPT_ROUNDS = 12;
@@ -15,6 +16,7 @@ const safeUserSelect = {
   id: true,
   email: true,
   name: true,
+  rollNumber: true,
   role: true,
   universityId: true,
   university: true,
@@ -93,12 +95,27 @@ export class UsersService {
     return safe;
   }
 
-  async importFromCsv(buffer: Buffer): Promise<ImportUsersResult> {
-    let records: CsvUserRow[];
+  async importFromFile(
+    buffer: Buffer,
+    mimetype: string,
+    originalname: string,
+  ): Promise<ImportUsersResult> {
+    const isXlsx =
+      mimetype.includes('spreadsheetml') ||
+      originalname.toLowerCase().endsWith('.xlsx');
+
+    let records: FileUserRow[];
     try {
-      records = parse(buffer, { columns: true, skip_empty_lines: true, trim: true });
+      if (isXlsx) {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        records = XLSX.utils.sheet_to_json<FileUserRow>(worksheet);
+      } else {
+        records = parse(buffer, { columns: true, skip_empty_lines: true, trim: true });
+      }
     } catch {
-      throw new BadRequestException('Failed to parse CSV file');
+      throw new BadRequestException('Failed to parse file — check the format and try again');
     }
 
     const validRoles = new Set(Object.values(Role));
@@ -110,7 +127,7 @@ export class UsersService {
       const row = records[i];
       const rowNum = i + 1;
 
-      if (!row.email || !isEmail(row.email)) {
+      if (!row.email || !isEmail(String(row.email))) {
         errors.push(`Row ${rowNum}: invalid email "${row.email ?? ''}"`);
         skipped++;
         continue;
@@ -122,7 +139,7 @@ export class UsersService {
         continue;
       }
 
-      const existing = await this.findByEmail(row.email);
+      const existing = await this.findByEmail(String(row.email));
       if (existing) {
         errors.push(`Row ${rowNum}: duplicate email "${row.email}"`);
         skipped++;
@@ -130,17 +147,18 @@ export class UsersService {
       }
 
       const plainPassword = randomBytes(4).toString('hex');
-      console.log(`[CSV Import] ${row.email} → password: ${plainPassword}`);
+      console.log(`[File Import] ${row.email} → password: ${plainPassword}`);
 
       try {
         const hashed = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
         await this.prisma.user.create({
           data: {
-            name: row.name || null,
-            email: row.email,
+            name: row.name ? String(row.name) : null,
+            email: String(row.email),
             password: hashed,
             role: (row.role as Role) || Role.STUDENT,
-            universityId: row.universityId ? parseInt(row.universityId, 10) : null,
+            rollNumber: row.rollNumber ? String(row.rollNumber) : null,
+            universityId: row.universityId ? parseInt(String(row.universityId), 10) : null,
           },
         });
         imported++;

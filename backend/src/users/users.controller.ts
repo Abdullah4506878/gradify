@@ -65,8 +65,12 @@ export class UsersController {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
-        if (!file.originalname.match(/\.csv$/i)) {
-          return cb(new BadRequestException('Only .csv files are accepted'), false);
+        const allowed =
+          file.originalname.match(/\.(csv|xlsx)$/i) ||
+          file.mimetype === 'text/csv' ||
+          file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        if (!allowed) {
+          return cb(new BadRequestException('Only .csv and .xlsx files are accepted'), false);
         }
         cb(null, true);
       },
@@ -74,7 +78,7 @@ export class UsersController {
   )
   importUsers(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
-    return this.usersService.importFromCsv(file.buffer);
+    return this.usersService.importFromFile(file.buffer, file.mimetype, file.originalname);
   }
 
   @Post()

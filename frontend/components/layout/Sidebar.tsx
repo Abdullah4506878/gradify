@@ -40,10 +40,14 @@ export default function Sidebar({ navItems }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            item.href === '/dashboard/manager'
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
+          // Use exact match when another nav item's href starts with this one
+          // (prevents the root Dashboard link highlighting on child pages)
+          const hasChildRoute = navItems.some(
+            (other) => other.href !== item.href && other.href.startsWith(item.href + '/'),
+          );
+          const isActive = hasChildRoute
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + '/');
 
           return (
             <Link

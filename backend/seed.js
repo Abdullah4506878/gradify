@@ -49,6 +49,13 @@ async function main() {
   });
   console.log('FYP Phase:', fyp1.phase);
 
+  const fyp2 = await prisma.fYPPhase.upsert({
+    where: { phase_sessionId: { phase: 'FYP_2', sessionId: session.id } },
+    update: {},
+    create: { phase: 'FYP_2', sessionId: session.id }
+  });
+  console.log('FYP Phase:', fyp2.phase);
+
   // Manager user
   const hashedPassword = await bcrypt.hash('Test@123', 12);
   const manager = await prisma.user.upsert({

@@ -10,6 +10,7 @@ import {
   BarChart,
   Clock,
   Activity,
+  User,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -22,6 +23,7 @@ const navItems = [
   { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
   { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
+  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
 ];
 
 const today = new Date().toLocaleDateString('en-US', {
