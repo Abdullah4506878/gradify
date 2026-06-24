@@ -6,10 +6,15 @@ import {
   ParseIntPipe,
   Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -47,12 +52,24 @@ export class TasksController {
   @Post(':id/submit')
   @UseGuards(RolesGuard)
   @Roles(Role.STUDENT)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (_req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
+        },
+      }),
+    }),
+  )
   submitTask(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthRequest,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Body() dto: SubmitTaskDto,
   ) {
-    return this.tasksService.submitTask(id, req.user.id, dto);
+    return this.tasksService.submitTask(id, req.user.id, dto, file);
   }
 
   @Post(':id/review')

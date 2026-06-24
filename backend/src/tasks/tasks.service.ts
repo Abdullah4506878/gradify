@@ -61,7 +61,7 @@ export class TasksService {
     return task;
   }
 
-  async submitTask(id: number, userId: number, dto: SubmitTaskDto) {
+  async submitTask(id: number, userId: number, dto: SubmitTaskDto, file?: Express.Multer.File) {
     const task = await this.findOne(id);
 
     if (task.assignedToId !== userId) {
@@ -71,8 +71,10 @@ export class TasksService {
       throw new BadRequestException('Only pending tasks can be submitted');
     }
 
+    const fileUrl = file ? `/uploads/${file.filename}` : dto.fileUrl;
+
     await this.prisma.taskSubmission.create({
-      data: { taskId: id, description: dto.description, fileUrl: dto.fileUrl, githubUrl: dto.githubUrl },
+      data: { taskId: id, description: dto.description, fileUrl, githubUrl: dto.githubUrl },
     });
 
     return this.prisma.task.update({

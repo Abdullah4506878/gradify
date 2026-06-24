@@ -27,6 +27,11 @@ const navItems = [
 
 type TaskStatus = 'PENDING' | 'SUBMITTED' | 'REVIEWED' | 'APPROVED' | 'REJECTED' | 'ACCEPTED_MINOR_ISSUES';
 
+interface TaskSubmission {
+  description: string;
+  fileUrl?: string | null;
+}
+
 interface Task {
   id: number;
   title: string;
@@ -34,6 +39,7 @@ interface Task {
   deadline: string;
   status: TaskStatus;
   type?: string;
+  submission?: TaskSubmission | null;
 }
 
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
@@ -108,9 +114,7 @@ export default function StudentTasksPage() {
       formData.append('description', submitDesc.trim());
       if (submitFile) formData.append('file', submitFile);
 
-      await api.post(`/tasks/${submitTask.id}/submit`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post(`/tasks/${submitTask.id}/submit`, formData);
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -220,8 +224,8 @@ export default function StudentTasksPage() {
               filtered.map((task, idx) => {
                 const s = STATUS_STYLES[task.status] ?? STATUS_STYLES.PENDING;
                 const descTrunc = task.description
-                  ? task.description.length > 60
-                    ? task.description.slice(0, 60) + '…'
+                  ? task.description.length > 80
+                    ? task.description.slice(0, 80) + '…'
                     : task.description
                   : null;
                 return (
@@ -322,6 +326,25 @@ export default function StudentTasksPage() {
                     </div>
                   )}
                 </div>
+
+                {viewTask.submission && (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-500 mb-1">Your Submission</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {viewTask.submission.description}
+                    </p>
+                    {viewTask.submission.fileUrl && (
+                      <a
+                        href={`http://localhost:4000${viewTask.submission.fileUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                      >
+                        View Attachment
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex justify-end">
                   <button
