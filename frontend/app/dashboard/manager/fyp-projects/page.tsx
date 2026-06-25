@@ -123,18 +123,46 @@ export default function FypProjectsPage() {
 
   const exportExcel = async () => {
     const xlsx = await import('xlsx');
-    const rows = projects.map((p, idx) => ({
-      '#': idx + 1,
-      'Group FYP ID': p.fypId,
-      'Project Title': p.proposal.projectTitle,
-      'Supervisor': p.preferences[0]?.supervisor?.name ?? p.preferences[0]?.supervisor?.email ?? '—',
-      'Problem Statement': p.proposal.problemStatement,
-      'Proposed Solution': p.proposal.proposedSolution,
-    }));
-    const ws = xlsx.utils.json_to_sheet(rows);
+
+    const headerRows: (string | number | null)[][] = [
+      ['THE SUPERIOR UNIVERSITY LAHORE', null, null, null],
+      ['Department of Software Engineering', null, null, null],
+      ['FYP Project Directory', null, null, null],
+      [`Generated on: ${new Date().toLocaleDateString()}`, null, null, null],
+      [null, null, null, null],
+      ['Sr#', 'FYP ID', 'Project Title', 'Supervisor'],
+    ];
+
+    const dataRows = projects.map((p, idx) => [
+      idx + 1,
+      p.fypId,
+      p.proposal.projectTitle,
+      p.preferences[0]?.supervisor?.name ?? p.preferences[0]?.supervisor?.email ?? '—',
+    ]);
+
+    const ws = xlsx.utils.aoa_to_sheet([...headerRows, ...dataRows]);
+
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } },
+    ];
+
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 20 },
+      { wch: 40 },
+      { wch: 25 },
+    ];
+
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, 'FYP Projects');
-    xlsx.writeFile(wb, 'fyp-projects.xlsx');
+
+    const dateStr = new Date()
+      .toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      .replace(' ', '-');
+    xlsx.writeFile(wb, `FYP-Projects-${dateStr}.xlsx`);
   };
 
   const exportPdf = () => {
@@ -143,6 +171,78 @@ export default function FypProjectsPage() {
 
   return (
     <DashboardLayout navItems={navItems}>
+      {/* Print CSS */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #fyp-print-area, #fyp-print-area * { visibility: visible; }
+          #fyp-print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20px;
+          }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+
+      {/* Hidden print area */}
+      <div id="fyp-print-area" style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+        {/* University header */}
+        <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
+          <img
+            src="/superior-logo.png"
+            alt="Superior University"
+            style={{ height: '60px', margin: '0 auto 8px', display: 'block' }}
+          />
+          <div style={{ fontWeight: '700', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#1e293b' }}>
+            THE SUPERIOR UNIVERSITY LAHORE
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+            Department of Software Engineering
+          </div>
+          <div style={{ fontWeight: '700', fontSize: '13px', marginTop: '8px', color: '#1e293b' }}>
+            FYP Project Directory
+          </div>
+          <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+            Generated on: {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        </div>
+
+        {/* Table */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', fontFamily: 'Arial, sans-serif' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#4F46E5', color: 'white' }}>
+              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '40px' }}>Sr#</th>
+              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '140px' }}>FYP ID</th>
+              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left' }}>Project Title</th>
+              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '160px' }}>Supervisor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((p, idx) => {
+              const supervisor = p.preferences[0]?.supervisor;
+              return (
+                <tr key={p.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>{idx + 1}</td>
+                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontWeight: '600' }}>{p.fypId}</td>
+                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>{p.proposal.projectTitle}</td>
+                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>
+                    {supervisor ? (supervisor.name ?? supervisor.email) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Footer */}
+        <div style={{ marginTop: '16px', fontSize: '11px', color: '#64748b', textAlign: 'right' }}>
+          Total Projects: {projects.length}
+        </div>
+      </div>
+
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between gap-4 print:hidden">
         <div>

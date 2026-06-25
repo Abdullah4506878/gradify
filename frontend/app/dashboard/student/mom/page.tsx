@@ -28,9 +28,11 @@ const navItems = [
 
 type MOMStatus = 'DRAFT' | 'SUBMITTED';
 
-interface ActionItem {
+interface Participant {
   sr: number;
-  description: string;
+  name: string;
+  role: string;
+  present: boolean;
 }
 
 interface MOM {
@@ -42,12 +44,12 @@ interface MOM {
   decisions: string;
   nextSteps?: string | null;
   attendees?: string | null;
-  actionItems?: string | null;
+  participants?: string | null;
   nextMeetingDate?: string | null;
   nextMeetingTime?: string | null;
   nextMeetingVenue?: string | null;
   status: MOMStatus;
-  group?: { fypId: string };
+  group?: { fypId: string | null };
 }
 
 const STATUS_STYLES: Record<MOMStatus, { label: string; className: string }> = {
@@ -55,11 +57,11 @@ const STATUS_STYLES: Record<MOMStatus, { label: string; className: string }> = {
   SUBMITTED: { label: 'Submitted', className: 'bg-green-50 text-green-700' },
 };
 
-function parseActionItems(raw: string | null | undefined): ActionItem[] {
+function parseParticipants(raw: string | null | undefined): Participant[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as ActionItem[];
+    if (Array.isArray(parsed)) return parsed as Participant[];
   } catch {
     // ignore
   }
@@ -139,7 +141,7 @@ export default function StudentMOMPage() {
     );
   });
 
-  const actionItems = parseActionItems(selected?.actionItems);
+  const participantsList = parseParticipants(selected?.participants);
 
   return (
     <DashboardLayout navItems={navItems}>
@@ -268,27 +270,31 @@ export default function StudentMOMPage() {
                 </div>
               </div>
 
-              <Field label="Agenda" value={selected.agenda} />
-              <Field label="Discussion" value={selected.discussion} />
-              <Field label="Decisions" value={selected.decisions} />
-
-              {/* Action items table */}
-              {actionItems.length > 0 && (
+              {/* Participants table */}
+              {participantsList.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Action Items</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Participants</p>
                   <div className="rounded-lg border border-gray-200 overflow-hidden">
                     <table className="min-w-full">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 w-12">Sr.</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Description</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 w-10">Sr.</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Name</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Role</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Attendance</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {actionItems.map((item) => (
-                          <tr key={item.sr}>
-                            <td className="px-4 py-2.5 text-sm text-gray-400">{item.sr}</td>
-                            <td className="px-4 py-2.5 text-sm text-gray-700">{item.description}</td>
+                        {participantsList.map((p) => (
+                          <tr key={p.sr}>
+                            <td className="px-4 py-2.5 text-sm text-gray-400">{p.sr}</td>
+                            <td className="px-4 py-2.5 text-sm text-gray-700">{p.name}</td>
+                            <td className="px-4 py-2.5 text-sm text-gray-600">{p.role}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${p.present ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                {p.present ? 'Present' : 'Absent'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -296,6 +302,10 @@ export default function StudentMOMPage() {
                   </div>
                 </div>
               )}
+
+              <Field label="Agenda" value={selected.agenda} />
+              <Field label="Discussion" value={selected.discussion} />
+              <Field label="Decisions" value={selected.decisions} />
 
               {/* Next meeting */}
               {(selected.nextMeetingDate || selected.nextMeetingTime || selected.nextMeetingVenue) && (

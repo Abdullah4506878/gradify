@@ -20,9 +20,9 @@ export class CreateMomDto {
   @IsString()
   nextSteps?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  attendees: string;
+  attendees?: string;
 
   @IsOptional()
   @IsString()
@@ -39,4 +39,8 @@ export class CreateMomDto {
   @IsOptional()
   @IsString()
   nextMeetingVenue?: string;
+
+  @IsOptional()
+  @IsString()
+  participants?: string;
 }

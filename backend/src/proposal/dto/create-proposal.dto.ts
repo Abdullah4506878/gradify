@@ -1,4 +1,4 @@
-import { IsInt, IsPositive, IsString, MinLength } from 'class-validator';
+import { IsInt, IsNotEmpty, IsPositive, IsString } from 'class-validator';
 
 export class CreateProposalDto {
   @IsInt()
@@ -6,14 +6,14 @@ export class CreateProposalDto {
   groupId: number;
 
   @IsString()
-  @MinLength(3)
+  @IsNotEmpty()
   projectTitle: string;
 
   @IsString()
-  @MinLength(10)
+  @IsNotEmpty()
   problemStatement: string;
 
   @IsString()
-  @MinLength(10)
+  @IsNotEmpty()
   proposedSolution: string;
 }

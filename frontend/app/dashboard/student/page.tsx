@@ -40,7 +40,7 @@ interface Member {
 
 interface Group {
   id: number;
-  fypId: string;
+  fypId: string | null;
   members: Member[];
 }
 
@@ -145,7 +145,9 @@ export default function StudentDashboard() {
                 {loading ? (
                   <div className="mt-2 h-7 w-32 animate-pulse rounded-md bg-gray-200" />
                 ) : myGroup ? (
-                  <p className="mt-1.5 text-xl font-bold text-gray-900 font-mono">{myGroup.fypId}</p>
+                  <p className="mt-1.5 text-xl font-bold text-gray-900 font-mono">
+                    {myGroup.fypId ?? <span className="text-sm font-normal italic text-gray-400">Pending assignment</span>}
+                  </p>
                 ) : (
                   <p className="mt-1.5 text-sm text-gray-400 italic">No Group</p>
                 )}

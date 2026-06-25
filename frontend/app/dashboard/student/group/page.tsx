@@ -16,6 +16,7 @@ import {
   AlertCircle,
   XCircle,
   FileText,
+  Lock,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -61,7 +62,7 @@ interface Preference {
 
 interface Group {
   id: number;
-  fypId: string;
+  fypId: string | null;
   status: GroupStatus;
   phase?: { phase: string; session?: { name: string } };
   leader: { id: number; name: string | null; email: string };
@@ -177,7 +178,11 @@ export default function StudentGroupPage() {
     setPhasesLoading(true);
     api
       .get<FypPhase[]>('/fyp-phases')
-      .then((res) => setPhases(res.data))
+      .then((res) => {
+        const fyp1 = res.data.filter((p) => p.phase === 'FYP_1');
+        setPhases(fyp1);
+        if (fyp1.length === 1) setSelectedPhaseId(String(fyp1[0].id));
+      })
       .catch(() => setPhases([]))
       .finally(() => setPhasesLoading(false));
   }, []);
@@ -298,8 +303,9 @@ export default function StudentGroupPage() {
   const isLeader = group?.leader?.id === user?.id;
   const status = group ? (STATUS_STYLES[group.status] ?? STATUS_STYLES.FORMING) : null;
   const myEnrollment = group?.members.find((m) => m.user?.id === user?.id || m.userId === user?.id);
-
-  console.log('Proposal state:', { proposalLoading, proposal, isLeader });
+  const supervisorAssigned = !!group?.preferences.find((p) => p.preference === 1);
+  const myRole = myEnrollment?.fypRole ?? null;
+  const proposalApproved = proposal?.status === 'APPROVED';
 
   return (
     <DashboardLayout navItems={navItems}>
@@ -363,7 +369,12 @@ export default function StudentGroupPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
                     FYP ID
                   </p>
-                  <p className="text-2xl font-bold text-indigo-600 font-mono">{group.fypId}</p>
+                  <p className="text-2xl font-bold font-mono">
+                    {group.fypId
+                      ? <span className="text-indigo-600">{group.fypId}</span>
+                      : <span className="text-gray-400 text-base font-normal italic">Assigned after preference submission</span>
+                    }
+                  </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   {status && (
@@ -436,85 +447,25 @@ export default function StudentGroupPage() {
             </CardContent>
           </Card>
 
-          {/* Project Idea card */}
-          <Card className="border-gray-200 shadow-none">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-gray-900">Project Idea</h2>
-                {proposalLoading && (
-                  <div className="h-5 w-20 animate-pulse rounded-full bg-gray-200" />
-                )}
-                {proposal?.status === 'APPROVED' && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                    <CheckCircle className="h-3 w-3" strokeWidth={2} />
-                    Approved
-                  </span>
-                )}
-                {proposal?.status === 'PENDING' && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
-                    <AlertCircle className="h-3 w-3" strokeWidth={2} />
-                    Under Review
-                  </span>
-                )}
-                {proposal?.status === 'REJECTED' && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                    <XCircle className="h-3 w-3" strokeWidth={2} />
-                    Rejected
-                  </span>
-                )}
-              </div>
-
-              {proposalLoading ? (
-                <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
-              ) : !proposal ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-400 italic">No project idea submitted yet.</p>
-                  {!proposalLoading && group && isLeader && !proposal && (
-                    <Link
-                      href="/dashboard/student/proposal"
-                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-                    >
-                      <Lightbulb className="h-4 w-4" strokeWidth={1.75} />
-                      Submit Project Idea
-                    </Link>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-900">{proposal.projectTitle}</p>
-                  {proposal.status === 'REJECTED' && proposal.supervisorComments && (
-                    <div className="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-                      <p className="font-medium mb-0.5">Supervisor feedback:</p>
-                      <p>{proposal.supervisorComments}</p>
-                    </div>
-                  )}
-                  {proposal.status === 'REJECTED' && isLeader && (
-                    <Link
-                      href="/dashboard/student/proposal"
-                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors mt-2"
-                    >
-                      <Lightbulb className="h-4 w-4" strokeWidth={1.75} />
-                      Resubmit Proposal
-                    </Link>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* FYP Role card */}
           <Card className="border-gray-200 shadow-none">
             <CardContent className="pt-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">My FYP Role</h2>
-              {myEnrollment?.fypRole ? (
-                <div className="space-y-1.5">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myEnrollment.fypRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
-                    {myEnrollment.fypRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
-                  </span>
-                  <p className="text-xs text-gray-400">This role is permanent for FYP-1 and FYP-2</p>
+
+              {!supervisorAssigned ? (
+                /* CASE 1: No supervisor assigned yet */
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                  <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
+                  <p className="text-sm text-gray-500">
+                    Role selection will be available after your supervisor is assigned.
+                  </p>
                 </div>
-              ) : (
+              ) : !myRole ? (
+                /* CASE 2: Supervisor assigned, role not yet selected */
                 <div className="space-y-3">
+                  <p className="text-sm font-medium text-indigo-600">
+                    Your supervisor has been assigned. Please select your FYP role.
+                  </p>
                   <div className="flex gap-3">
                     <button
                       type="button"
@@ -536,6 +487,110 @@ export default function StudentGroupPage() {
                     <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{roleError}</div>
                   )}
                 </div>
+              ) : !proposalApproved ? (
+                /* CASE 3: Role selected, proposal not yet approved */
+                <div className="space-y-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {myRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+                  </span>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <Lock className="h-3.5 w-3.5 text-gray-400 shrink-0" strokeWidth={1.75} />
+                    <p className="text-xs text-gray-500">Role locked until proposal is approved</p>
+                  </div>
+                </div>
+              ) : (
+                /* CASE 4: Role selected and proposal approved */
+                <div className="space-y-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {myRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+                  </span>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" strokeWidth={2} />
+                    <p className="text-xs text-green-600 font-medium">Role confirmed</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Project Idea card */}
+          <Card className="border-gray-200 shadow-none">
+            <CardContent className="pt-6">
+              {!myRole ? (
+                /* Locked — role must be selected first */
+                <>
+                  <h2 className="text-sm font-semibold text-gray-900 mb-4">Project Idea</h2>
+                  <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
+                    <p className="text-sm text-gray-500">
+                      Submit your FYP role first to unlock project idea submission.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                /* Normal proposal section */
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-gray-900">Project Idea</h2>
+                    {proposalLoading && (
+                      <div className="h-5 w-20 animate-pulse rounded-full bg-gray-200" />
+                    )}
+                    {proposal?.status === 'APPROVED' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle className="h-3 w-3" strokeWidth={2} />
+                        Approved
+                      </span>
+                    )}
+                    {proposal?.status === 'PENDING' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
+                        <AlertCircle className="h-3 w-3" strokeWidth={2} />
+                        Under Review
+                      </span>
+                    )}
+                    {proposal?.status === 'REJECTED' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                        <XCircle className="h-3 w-3" strokeWidth={2} />
+                        Rejected
+                      </span>
+                    )}
+                  </div>
+
+                  {proposalLoading ? (
+                    <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
+                  ) : !proposal ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-400 italic">No project idea submitted yet.</p>
+                      {isLeader && (
+                        <Link
+                          href="/dashboard/student/proposal"
+                          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+                        >
+                          <Lightbulb className="h-4 w-4" strokeWidth={1.75} />
+                          Submit Project Idea
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-900">{proposal.projectTitle}</p>
+                      {proposal.status === 'REJECTED' && proposal.supervisorComments && (
+                        <div className="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                          <p className="font-medium mb-0.5">Supervisor feedback:</p>
+                          <p>{proposal.supervisorComments}</p>
+                        </div>
+                      )}
+                      {proposal.status === 'REJECTED' && isLeader && (
+                        <Link
+                          href="/dashboard/student/proposal"
+                          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors mt-2"
+                        >
+                          <Lightbulb className="h-4 w-4" strokeWidth={1.75} />
+                          Resubmit Proposal
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -557,14 +612,22 @@ export default function StudentGroupPage() {
                 <div className="space-y-3">
                   <p className="text-sm text-gray-400 italic">Not submitted yet.</p>
                   {isLeader && (
-                    <button
-                      type="button"
-                      onClick={() => { setP1(''); setP2(''); setP3(''); setPrefsError(null); setPrefsOpen(true); }}
-                      className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-                    >
-                      <Star className="h-4 w-4" strokeWidth={1.75} />
-                      Submit Preferences
-                    </button>
+                    <div className="space-y-2">
+                      {group.members.length < 2 && (
+                        <p className="text-sm text-amber-600 font-medium">
+                          ⚠️ You need at least 2 members before submitting preferences.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => { setP1(''); setP2(''); setP3(''); setPrefsError(null); setPrefsOpen(true); }}
+                        disabled={group.members.length < 2}
+                        className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Star className="h-4 w-4" strokeWidth={1.75} />
+                        Submit Preferences
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (

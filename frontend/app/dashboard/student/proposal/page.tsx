@@ -166,10 +166,6 @@ export default function SubmitProposalPage() {
 
   const validate = (): string | null => {
     if (!projectTitle.trim()) return 'Project title is required.';
-    if (problemStatement.trim().length < 800)
-      return `Problem statement must be at least 800 characters (currently ${problemStatement.trim().length}).`;
-    if (proposedSolution.trim().length < 800)
-      return `Proposed solution must be at least 800 characters (currently ${proposedSolution.trim().length}).`;
     return null;
   };
 
@@ -251,6 +247,23 @@ export default function SubmitProposalPage() {
         </div>
       ) : (
         <>
+          {/* ── Rejection notice ── */}
+          {proposal?.status === 'REJECTED' && (
+            <div className="max-w-[800px] mx-auto mb-4 no-print space-y-2">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  Your proposal was rejected. Please revise and resubmit.
+                </p>
+              </div>
+              {proposal.supervisorComments && (
+                <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-600 mb-1">Supervisor Comments:</p>
+                  <p className="text-sm text-red-700">{proposal.supervisorComments}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Top action bar ── */}
           <div className="max-w-[800px] mx-auto mb-2 flex items-center justify-end no-print">
             <button
@@ -407,13 +420,13 @@ export default function SubmitProposalPage() {
                     <label htmlFor="problemStatement" className="text-xs font-semibold text-gray-800">
                       Problem Statement:
                     </label>
-                    <span className={`text-xs tabular-nums ${problemStatement.trim().length >= 800 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
-                      {problemStatement.trim().length} / 800
+                    <span className={`text-xs tabular-nums ${problemStatement.trim().length >= 1500 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                      {problemStatement.trim().length} / 1500
                     </span>
                   </div>
                   <textarea
                     id="problemStatement"
-                    rows={4}
+                    rows={8}
                     value={problemStatement}
                     onChange={(e) => { setProblemStatement(e.target.value); setError(null); }}
                     readOnly={isReadOnly}
@@ -428,13 +441,13 @@ export default function SubmitProposalPage() {
                     <label htmlFor="proposedSolution" className="text-xs font-semibold text-gray-800">
                       Proposed Solution:
                     </label>
-                    <span className={`text-xs tabular-nums ${proposedSolution.trim().length >= 800 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
-                      {proposedSolution.trim().length} / 800
+                    <span className={`text-xs tabular-nums ${proposedSolution.trim().length >= 1500 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                      {proposedSolution.trim().length} / 1500
                     </span>
                   </div>
                   <textarea
                     id="proposedSolution"
-                    rows={4}
+                    rows={8}
                     value={proposedSolution}
                     onChange={(e) => { setProposedSolution(e.target.value); setError(null); }}
                     readOnly={isReadOnly}

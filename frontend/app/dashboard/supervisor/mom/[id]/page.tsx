@@ -31,9 +31,11 @@ const navItems = [
 
 type MOMStatus = 'DRAFT' | 'SUBMITTED';
 
-interface ActionItem {
+interface Participant {
   sr: number;
-  description: string;
+  name: string;
+  role: string;
+  present: boolean;
 }
 
 interface MOMDetail {
@@ -43,14 +45,12 @@ interface MOMDetail {
   agenda: string;
   discussion: string;
   decisions: string;
-  nextSteps?: string | null;
-  attendees?: string | null;
-  actionItems?: string | null;
+  participants?: string | null;
   nextMeetingDate?: string | null;
   nextMeetingTime?: string | null;
   nextMeetingVenue?: string | null;
   status: MOMStatus;
-  group?: { fypId: string };
+  group?: { fypId: string | null };
 }
 
 const STATUS_STYLES: Record<MOMStatus, { label: string; className: string }> = {
@@ -71,11 +71,11 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   );
 }
 
-function parseActionItems(raw: string | null | undefined): ActionItem[] {
+function parseParticipants(raw: string | null | undefined): Participant[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as ActionItem[];
+    if (Array.isArray(parsed)) return parsed as Participant[];
   } catch {
     // ignore
   }
@@ -152,7 +152,6 @@ export default function MOMDetailPage() {
 
       {/* Hidden print area */}
       {mom && (() => {
-        const printItems = parseActionItems(mom.actionItems);
         return (
           <div id="mom-print-area" style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
             <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
@@ -189,12 +188,6 @@ export default function MOMDetailPage() {
                   <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Meeting Date</td>
                   <td colSpan={3} style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{meetingDateFormatted}</td>
                 </tr>
-                {mom.attendees && (
-                  <tr>
-                    <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Attendees</td>
-                    <td colSpan={3} style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{mom.attendees}</td>
-                  </tr>
-                )}
               </tbody>
             </table>
 
@@ -202,7 +195,6 @@ export default function MOMDetailPage() {
               { label: 'Agenda', value: mom.agenda },
               { label: 'Discussion', value: mom.discussion },
               { label: 'Decisions', value: mom.decisions },
-              ...(mom.nextSteps ? [{ label: 'Next Steps', value: mom.nextSteps }] : []),
             ].map(({ label, value }) => (
               <div key={label} style={{ marginBottom: '16px' }}>
                 <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
@@ -211,30 +203,6 @@ export default function MOMDetailPage() {
                 <p style={{ fontSize: '12px', color: '#1e293b', lineHeight: '1.7', whiteSpace: 'pre-wrap', margin: 0 }}>{value}</p>
               </div>
             ))}
-
-            {printItems.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
-                  Action Items
-                </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', textAlign: 'left', width: '40px' }}>Sr#</th>
-                      <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', textAlign: 'left' }}>Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {printItems.map((item) => (
-                      <tr key={item.sr}>
-                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{item.sr}</td>
-                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{item.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
 
             {(mom.nextMeetingDate || mom.nextMeetingTime || mom.nextMeetingVenue) && (
               <div style={{ marginBottom: '16px' }}>
@@ -309,7 +277,7 @@ export default function MOMDetailPage() {
           <p className="mt-1 text-xs text-gray-400">This record may have been deleted or does not exist.</p>
         </div>
       ) : mom ? (() => {
-        const parsedItems = parseActionItems(mom.actionItems);
+        const parsedParticipants = parseParticipants(mom.participants);
         const hasNextMeeting = mom.nextMeetingDate || mom.nextMeetingTime || mom.nextMeetingVenue;
         return (
           <div className="max-w-2xl space-y-4">
@@ -374,56 +342,51 @@ export default function MOMDetailPage() {
                   {meetingDateFormatted}
                 </div>
 
-                {mom.attendees && (
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium text-gray-700">Attendees: </span>
-                    {mom.attendees}
-                  </div>
-                )}
               </div>
             </div>
 
             {/* Content card */}
             <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
-              <Field label="Agenda" value={mom.agenda} />
-              <div className="border-t border-gray-100" />
-              <Field label="Discussion" value={mom.discussion} />
-              <div className="border-t border-gray-100" />
-              <Field label="Decisions" value={mom.decisions} />
-              {mom.nextSteps && (
+              {/* Participants */}
+              {parsedParticipants.length > 0 && (
                 <>
-                  <div className="border-t border-gray-100" />
-                  <Field label="Next Steps" value={mom.nextSteps} />
-                </>
-              )}
-
-              {/* Action Items */}
-              {parsedItems.length > 0 && (
-                <>
-                  <div className="border-t border-gray-100" />
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Action Items</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Participants</p>
                     <div className="rounded-lg border border-gray-100 overflow-hidden">
                       <table className="min-w-full">
                         <thead className="bg-gray-50 border-b border-gray-100">
                           <tr>
                             <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">Sr#</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Description</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Name</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Role</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Attendance</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {parsedItems.map((item) => (
-                            <tr key={item.sr}>
-                              <td className="px-3 py-2.5 text-xs text-gray-400 tabular-nums">{item.sr}</td>
-                              <td className="px-3 py-2.5 text-sm text-gray-700">{item.description}</td>
+                          {parsedParticipants.map((p) => (
+                            <tr key={p.sr}>
+                              <td className="px-3 py-2.5 text-xs text-gray-400 tabular-nums">{p.sr}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-700">{p.name}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-600">{p.role}</td>
+                              <td className="px-3 py-2.5">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${p.present ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                  {p.present ? 'Present' : 'Absent'}
+                                </span>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
+                  <div className="border-t border-gray-100" />
                 </>
               )}
+              <Field label="Agenda" value={mom.agenda} />
+              <div className="border-t border-gray-100" />
+              <Field label="Discussion" value={mom.discussion} />
+              <div className="border-t border-gray-100" />
+              <Field label="Decisions" value={mom.decisions} />
 
               {/* Next Meeting */}
               {hasNextMeeting && (

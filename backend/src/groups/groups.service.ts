@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FypRole, GroupStatus, ProposalStatus, Role, Semester } from '@prisma/client';
+import { FypRole, GroupStatus, Phase, ProposalStatus, Role, Semester } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -32,16 +32,18 @@ export class GroupsService {
   ) {}
 
   async create(leaderId: number, dto: CreateGroupDto, universityId: number) {
+    const phase = await this.prisma.fYPPhase.findUnique({ where: { id: dto.phaseId } });
+    if (!phase || phase.phase !== Phase.FYP_1) {
+      throw new BadRequestException('Students can only create groups for FYP-1');
+    }
+
     const existing = await this.prisma.enrollment.findFirst({
       where: { userId: leaderId, group: { phaseId: dto.phaseId } },
     });
     if (existing) throw new ConflictException('You are already in a group for this phase');
 
-    const fypId = await this.generateFypId(dto.phaseId);
-
     const group = await this.prisma.group.create({
       data: {
-        fypId,
         phaseId: dto.phaseId,
         universityId,
         leaderId,
@@ -103,6 +105,11 @@ export class GroupsService {
       throw new ConflictException('Supervisor preferences have already been submitted and cannot be changed');
     }
 
+    const memberCount = await this.prisma.enrollment.count({ where: { groupId } });
+    if (memberCount < 2) {
+      throw new BadRequestException('Group must have at least 2 members before submitting preferences');
+    }
+
     const preferenceNums = dto.preferences.map((p) => p.preference);
     const hasDuplicateRank = new Set(preferenceNums).size !== preferenceNums.length;
     if (hasDuplicateRank) throw new BadRequestException('Each preference rank (1, 2, 3) must be unique');
@@ -114,6 +121,12 @@ export class GroupsService {
         preference: p.preference,
       })),
     });
+
+    // Generate FYP ID if not yet assigned
+    if (!group.fypId) {
+      const fypId = await this.generateFypId(group.phaseId);
+      await this.prisma.group.update({ where: { id: groupId }, data: { fypId } });
+    }
 
     // Notify all managers in this university
     const managers = await this.prisma.user.findMany({
@@ -236,7 +249,7 @@ export class GroupsService {
     const semCode = SEMESTER_CODE[phase.session.semester];
     const year = String(phase.session.year).slice(-2);
 
-    const count = await this.prisma.group.count({ where: { phaseId } });
+    const count = await this.prisma.group.count({ where: { phaseId, fypId: { not: null } } });
     const sequence = String(count + 1).padStart(3, '0');
 
     return `${programCode}-FYP-${semCode}${year}-${sequence}`;

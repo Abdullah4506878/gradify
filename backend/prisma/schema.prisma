@@ -157,7 +157,7 @@ model FYPPhase {
 
 model Group {
   id             Int                    @id @default(autoincrement())
-  fypId          String                 @unique
+  fypId          String?                @unique
   universityId   Int
   phaseId        Int
   leaderId       Int
@@ -213,6 +213,7 @@ model MeetingMinutes {
   nextMeetingDate  String?
   nextMeetingTime  String?
   nextMeetingVenue String?
+  participants     String?
   status           MOMStatus @default(DRAFT)
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())

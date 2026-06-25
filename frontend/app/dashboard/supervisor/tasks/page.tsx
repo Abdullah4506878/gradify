@@ -36,16 +36,24 @@ const navItems = [
 type TaskStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'MINOR_ISSUES' | 'REJECTED';
 type TaskType = 'DOCUMENTATION' | 'DEVELOPMENT_WEB' | 'DEVELOPMENT_MOBILE';
 
+type FypRole = 'DOCUMENTATION' | 'DEVELOPMENT';
+
 interface GroupMember {
   id: number;
   name: string | null;
   email: string;
 }
 
+interface GroupEnrollment {
+  userId: number;
+  fypRole: FypRole | null;
+  user: GroupMember;
+}
+
 interface Group {
   id: number;
-  fypId: string;
-  members: { user: GroupMember }[];
+  fypId: string | null;
+  members: GroupEnrollment[];
 }
 
 interface TaskSubmission {
@@ -73,7 +81,7 @@ interface Task {
   deadline?: string | null;
   status: TaskStatus;
   assignedTo: { id: number; name: string | null; email: string };
-  group: { id: number; fypId: string };
+  group: { id: number; fypId: string | null };
   submissions: TaskSubmission[];
   reviews: TaskReview[];
 }
@@ -167,7 +175,10 @@ export default function SupervisorTasksPage() {
   };
 
   const selectedGroup = groups.find((g) => String(g.id) === selectedGroupId);
-  const groupMembers = selectedGroup?.members.map((m) => m.user) ?? [];
+  const groupEnrollments = selectedGroup?.members ?? [];
+  const groupMembers = groupEnrollments.map((e) => e.user);
+  const selectedEnrollment = groupEnrollments.find((e) => String(e.user.id) === selectedStudentId);
+  const selectedStudentRole = selectedEnrollment?.fypRole ?? null;
 
   const handleAssign = async () => {
     if (!selectedGroupId || !selectedStudentId || !taskType || !taskTitle.trim() || !taskDesc.trim()) {
@@ -429,7 +440,7 @@ export default function SupervisorTasksPage() {
               >
                 <option value="">Select group…</option>
                 {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.fypId}</option>
+                  <option key={g.id} value={g.id}>{g.fypId ?? `Group #${g.id}`}</option>
                 ))}
               </select>
             </div>
@@ -441,7 +452,15 @@ export default function SupervisorTasksPage() {
               </label>
               <select
                 value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  setSelectedStudentId(newId);
+                  const enrollment = groupEnrollments.find((en) => String(en.user.id) === newId);
+                  const role = enrollment?.fypRole;
+                  if (role === 'DOCUMENTATION') setTaskType('DOCUMENTATION');
+                  else if (role === 'DEVELOPMENT') setTaskType('DEVELOPMENT_WEB');
+                  else setTaskType('');
+                }}
                 disabled={!selectedGroupId}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors disabled:opacity-50"
               >
@@ -450,6 +469,13 @@ export default function SupervisorTasksPage() {
                   <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
                 ))}
               </select>
+              {selectedStudentId && selectedStudentRole && (
+                <div className="mt-1.5">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${selectedStudentRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {selectedStudentRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Task Type */}
@@ -462,10 +488,18 @@ export default function SupervisorTasksPage() {
                 onChange={(e) => setTaskType(e.target.value as TaskType)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
               >
-                <option value="">Select type…</option>
-                <option value="DOCUMENTATION">Documentation</option>
-                <option value="DEVELOPMENT_WEB">Development – Web</option>
-                <option value="DEVELOPMENT_MOBILE">Development – Mobile</option>
+                {selectedStudentRole !== 'DOCUMENTATION' && selectedStudentRole !== 'DEVELOPMENT' && (
+                  <option value="">Select type…</option>
+                )}
+                {(!selectedStudentRole || selectedStudentRole === 'DOCUMENTATION') && (
+                  <option value="DOCUMENTATION">📄 Documentation</option>
+                )}
+                {(!selectedStudentRole || selectedStudentRole === 'DEVELOPMENT') && (
+                  <option value="DEVELOPMENT_WEB">🌐 Development – Web</option>
+                )}
+                {(!selectedStudentRole || selectedStudentRole === 'DEVELOPMENT') && (
+                  <option value="DEVELOPMENT_MOBILE">📱 Development – Mobile</option>
+                )}
               </select>
             </div>
 

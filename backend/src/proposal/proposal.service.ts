@@ -31,8 +31,39 @@ export class ProposalService {
     const group = await this.prisma.group.findUnique({ where: { id: dto.groupId } });
     if (!group) throw new NotFoundException('Group not found');
 
+    const groupLabel = group.fypId ?? `#${group.id}`;
     const existing = await this.prisma.proposal.findUnique({ where: { groupId: dto.groupId } });
-    if (existing) throw new ConflictException('A proposal for this group already exists');
+
+    if (existing) {
+      if (existing.status !== ProposalStatus.REJECTED) {
+        throw new ConflictException('A proposal for this group already exists');
+      }
+      // Resubmit: update the rejected proposal
+      const proposal = await this.prisma.proposal.update({
+        where: { id: existing.id },
+        data: {
+          projectTitle: dto.projectTitle,
+          problemStatement: dto.problemStatement,
+          proposedSolution: dto.proposedSolution,
+          status: ProposalStatus.PENDING,
+          supervisorComments: null,
+        },
+        include: PROPOSAL_INCLUDE,
+      });
+      const p1 = await this.prisma.supervisorPreference.findFirst({
+        where: { groupId: dto.groupId, preference: 1 },
+      });
+      if (p1) {
+        this.notificationService.createNotification(
+          p1.supervisorId,
+          'Proposal Resubmitted',
+          `Group ${groupLabel} has resubmitted their project idea for review`,
+          'PROPOSAL',
+          '/dashboard/supervisor/proposals',
+        ).catch(() => {});
+      }
+      return proposal;
+    }
 
     const proposal = await this.prisma.proposal.create({
       data: {
@@ -52,7 +83,7 @@ export class ProposalService {
       this.notificationService.createNotification(
         p1.supervisorId,
         'New Proposal Submitted',
-        `Group ${group.fypId} has submitted their project idea for review`,
+        `Group ${groupLabel} has submitted their project idea for review`,
         'PROPOSAL',
         '/dashboard/supervisor/proposals',
       ).catch(() => {});

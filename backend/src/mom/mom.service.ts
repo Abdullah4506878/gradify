@@ -36,6 +36,7 @@ export class MomService {
         nextMeetingDate: dto.nextMeetingDate,
         nextMeetingTime: dto.nextMeetingTime,
         nextMeetingVenue: dto.nextMeetingVenue,
+        participants: dto.participants,
       },
       include: MOM_INCLUDE,
     });

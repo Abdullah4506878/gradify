@@ -69,7 +69,7 @@ interface Task {
   status: TaskStatus;
   assignedTo: { id: number; name: string | null; email: string };
   supervisor: { id: number; name: string | null; email: string };
-  group: { id: number; fypId: string };
+  group: { id: number; fypId: string | null };
   submissions: TaskSubmission[];
   reviews: TaskReview[];
 }
@@ -124,7 +124,7 @@ export default function ManagerTasksPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const uniqueGroups = Array.from(new Map(tasks.map((t) => [t.group.fypId, t.group])).values());
+  const uniqueGroups = Array.from(new Map(tasks.map((t) => [t.group.id, t.group])).values());
 
   const filtered = tasks.filter((t) => {
     const q = search.toLowerCase();
@@ -133,7 +133,7 @@ export default function ManagerTasksPage() {
       (t.assignedTo.name ?? t.assignedTo.email).toLowerCase().includes(q) ||
       t.title.toLowerCase().includes(q);
     const matchesStatus = !statusFilter || t.status === statusFilter;
-    const matchesGroup = !groupFilter || t.group.fypId === groupFilter;
+    const matchesGroup = !groupFilter || String(t.group.id) === groupFilter;
     return matchesSearch && matchesStatus && matchesGroup;
   });
 
@@ -192,7 +192,7 @@ export default function ManagerTasksPage() {
         >
           <option value="">All Groups</option>
           {uniqueGroups.map((g) => (
-            <option key={g.fypId} value={g.fypId}>{g.fypId}</option>
+            <option key={g.id} value={String(g.id)}>{g.fypId ?? `Group #${g.id}`}</option>
           ))}
         </select>
       </div>
@@ -234,7 +234,7 @@ export default function ManagerTasksPage() {
                   <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-4 text-sm text-gray-400 tabular-nums">{idx + 1}</td>
                     <td className="px-5 py-4 text-sm font-medium text-gray-900">{task.assignedTo.name ?? task.assignedTo.email}</td>
-                    <td className="px-5 py-4 font-mono text-sm text-gray-700">{task.group.fypId}</td>
+                    <td className="px-5 py-4 font-mono text-sm text-gray-700">{task.group.fypId ?? `Group #${task.group.id}`}</td>
                     <td className="px-5 py-4 text-sm text-gray-700 max-w-[180px] truncate">{task.title}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${type.className}`}>{type.label}</span>
@@ -282,7 +282,7 @@ export default function ManagerTasksPage() {
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-medium ${type.className}`}>{type.label}</span>
-                    <span>Group: <span className="font-mono font-medium text-gray-700">{viewTask.group.fypId}</span></span>
+                    <span>Group: <span className="font-mono font-medium text-gray-700">{viewTask.group.fypId ?? `Group #${viewTask.group.id}`}</span></span>
                     {viewTask.deadline && <span>Due: {new Date(viewTask.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
                   </div>
                   <div className="text-xs text-gray-500 space-y-0.5">

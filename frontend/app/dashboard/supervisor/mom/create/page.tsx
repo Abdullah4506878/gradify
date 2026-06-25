@@ -35,15 +35,39 @@ const navItems = [
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
 ];
 
+type FypRole = 'DOCUMENTATION' | 'DEVELOPMENT';
+
 interface Group {
   id: number;
-  fypId: string;
+  fypId: string | null;
 }
 
-interface ActionItem {
+interface GroupMember {
   id: number;
-  description: string;
+  userId: number;
+  fypRole: FypRole | null;
+  user: { id: number; name: string | null; email: string };
 }
+
+interface GroupDetail {
+  id: number;
+  fypId: string | null;
+  members: GroupMember[];
+}
+
+interface Participant {
+  id: number;
+  name: string;
+  role: 'Supervisor' | 'Team Lead' | 'Student';
+  present: boolean;
+}
+
+const PARTICIPANT_ROLES = ['Supervisor', 'Team Lead', 'Student'] as const;
+
+const ROLE_BADGE: Record<FypRole, string> = {
+  DOCUMENTATION: '📄 Documentation',
+  DEVELOPMENT: '💻 Development',
+};
 
 export default function CreateMOMPage() {
   const router = useRouter();
@@ -52,19 +76,20 @@ export default function CreateMOMPage() {
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupDetail, setGroupDetail] = useState<GroupDetail | null>(null);
 
   const [groupId, setGroupId] = useState(defaultGroupId);
-  const [attendees, setAttendees] = useState('');
   const [agenda, setAgenda] = useState('');
   const [discussion, setDiscussion] = useState('');
   const [decisions, setDecisions] = useState('');
-  const [nextSteps, setNextSteps] = useState('');
-
-  const [actionItems, setActionItems] = useState<ActionItem[]>([{ id: 1, description: '' }]);
-  const [nextActionId, setNextActionId] = useState(2);
   const [nextMeetingDate, setNextMeetingDate] = useState('');
   const [nextMeetingTime, setNextMeetingTime] = useState('');
   const [nextMeetingVenue, setNextMeetingVenue] = useState('');
+
+  const [participants, setParticipants] = useState<Participant[]>([
+    { id: 1, name: '', role: 'Supervisor', present: true },
+  ]);
+  const [nextParticipantId, setNextParticipantId] = useState(2);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,37 +100,42 @@ export default function CreateMOMPage() {
       .then((res) => setGroups(res.data))
       .catch(() => {})
       .finally(() => setGroupsLoading(false));
+
+    api.get<{ name: string | null; email: string }>('/users/me')
+      .then((res) => {
+        const name = res.data.name ?? res.data.email;
+        setParticipants([{ id: 1, name, role: 'Supervisor', present: true }]);
+      })
+      .catch(() => {});
   }, []);
 
-  const addActionItem = () => {
-    setActionItems((prev) => [...prev, { id: nextActionId, description: '' }]);
-    setNextActionId((n) => n + 1);
+  useEffect(() => {
+    if (!groupId) { setGroupDetail(null); return; }
+    api.get<GroupDetail>(`/groups/${groupId}`)
+      .then((res) => setGroupDetail(res.data))
+      .catch(() => setGroupDetail(null));
+  }, [groupId]);
+
+  const addParticipant = () => {
+    setParticipants((prev) => [...prev, { id: nextParticipantId, name: '', role: 'Student', present: true }]);
+    setNextParticipantId((n) => n + 1);
   };
 
-  const removeActionItem = (id: number) => {
-    setActionItems((prev) => prev.filter((a) => a.id !== id));
+  const removeParticipant = (id: number) => {
+    setParticipants((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const updateActionItem = (id: number, description: string) => {
-    setActionItems((prev) => prev.map((a) => (a.id === id ? { ...a, description } : a)));
+  const updateParticipant = <K extends keyof Participant>(id: number, field: K, value: Participant[K]) => {
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
   };
 
   const MIN = 600;
 
   const validate = (): string | null => {
     if (!groupId) return 'Please select a group.';
-    if (!attendees.trim()) return 'Attendees are required.';
     if (!agenda.trim()) return 'Agenda is required.';
     if (!discussion.trim()) return 'Discussion is required.';
     if (!decisions.trim()) return 'Decisions is required.';
-    const filledItems = actionItems.filter((a) => a.description.trim());
-    if (actionItems.some((a) => !a.description.trim()) && filledItems.length < actionItems.length) {
-      if (filledItems.length === 0 && actionItems.length === 1) {
-        // Single empty row — that's fine (optional)
-      } else {
-        return 'All action item descriptions must be filled in.';
-      }
-    }
     return null;
   };
 
@@ -119,21 +149,24 @@ export default function CreateMOMPage() {
     setError(null);
     setSubmitting(true);
 
-    const filledItems = actionItems.filter((a) => a.description.trim());
-    const actionItemsJson =
-      filledItems.length > 0
-        ? JSON.stringify(filledItems.map((a, idx) => ({ sr: idx + 1, description: a.description.trim() })))
+    const filledParticipants = participants.filter((p) => p.name.trim());
+    const participantsJson =
+      filledParticipants.length > 0
+        ? JSON.stringify(filledParticipants.map((p, idx) => ({
+            sr: idx + 1,
+            name: p.name.trim(),
+            role: p.role,
+            present: p.present,
+          })))
         : undefined;
 
     try {
       await api.post('/mom', {
         groupId: parseInt(groupId, 10),
-        attendees: attendees.trim(),
         agenda: agenda.trim(),
         discussion: discussion.trim(),
         decisions: decisions.trim(),
-        nextSteps: nextSteps.trim() || undefined,
-        actionItems: actionItemsJson,
+        participants: participantsJson,
         nextMeetingDate: nextMeetingDate || undefined,
         nextMeetingTime: nextMeetingTime || undefined,
         nextMeetingVenue: nextMeetingVenue.trim() || undefined,
@@ -208,27 +241,108 @@ export default function CreateMOMPage() {
                   <SelectContent>
                     {groups.map((g) => (
                       <SelectItem key={g.id} value={String(g.id)}>
-                        {g.fypId}
+                        {g.fypId ?? `Group #${g.id}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
+
+              {/* Member roles panel */}
+              {groupDetail && groupDetail.members.length > 0 && (
+                <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Group Members</p>
+                  <ul className="space-y-1.5">
+                    {groupDetail.members.map((m) => (
+                      <li key={m.id} className="flex items-center gap-2">
+                        <span className="text-sm text-gray-700">👤 {m.user.name ?? m.user.email}</span>
+                        {m.fypRole ? (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${m.fypRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                            {ROLE_BADGE[m.fypRole]}
+                          </span>
+                        ) : (
+                          <span className="text-xs italic text-gray-400">Role not selected</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            {/* Attendees */}
+            {/* Participants */}
             <div>
-              <label htmlFor="attendees" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Attendees <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="attendees"
-                type="text"
-                value={attendees}
-                onChange={(e) => setAttendees(e.target.value)}
-                placeholder="e.g. Ahmed Raza, Bilal Hassan, Hamza Khan"
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Participants</label>
+                <button
+                  type="button"
+                  onClick={addParticipant}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                  Add Participant
+                </button>
+              </div>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">Sr#</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-32">Role</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-24">Attendance</th>
+                      <th className="px-3 py-2 w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {participants.map((p, idx) => (
+                      <tr key={p.id}>
+                        <td className="px-3 py-2.5 text-xs text-gray-500 tabular-nums">{idx + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={p.name}
+                            onChange={(e) => updateParticipant(p.id, 'name', e.target.value)}
+                            placeholder="Full name…"
+                            className="w-full text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={p.role}
+                            onChange={(e) => updateParticipant(p.id, 'role', e.target.value as Participant['role'])}
+                            className="text-xs text-gray-700 bg-transparent focus:outline-none w-full"
+                          >
+                            {PARTICIPANT_ROLES.map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <button
+                            type="button"
+                            onClick={() => updateParticipant(p.id, 'present', !p.present)}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${p.present ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-700 hover:bg-red-100'}`}
+                          >
+                            {p.present ? 'Present' : 'Absent'}
+                          </button>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {participants.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeParticipant(p.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Agenda */}
@@ -249,7 +363,6 @@ export default function CreateMOMPage() {
                 placeholder="What topics were on the meeting agenda?"
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
               />
-              <p className="mt-1 text-xs text-gray-400">Minimum 600 characters</p>
             </div>
 
             {/* Discussion */}
@@ -270,7 +383,6 @@ export default function CreateMOMPage() {
                 placeholder="Summarize the key points discussed during the meeting…"
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
               />
-              <p className="mt-1 text-xs text-gray-400">Minimum 600 characters</p>
             </div>
 
             {/* Decisions */}
@@ -291,84 +403,6 @@ export default function CreateMOMPage() {
                 placeholder="What decisions were made during the meeting?"
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
               />
-              <p className="mt-1 text-xs text-gray-400">Minimum 600 characters</p>
-            </div>
-
-            {/* Action Items */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">Action Items</label>
-                <button
-                  type="button"
-                  onClick={addActionItem}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                  Add Item
-                </button>
-              </div>
-              <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">Sr#</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Item Description</th>
-                      <th className="px-3 py-2 w-8" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {actionItems.map((item, idx) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2.5 text-xs text-gray-500 tabular-nums">{idx + 1}</td>
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => updateActionItem(item.id, e.target.value)}
-                            placeholder="Describe the action item…"
-                            className="w-full text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          {actionItems.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeActionItem(item.id)}
-                              className="text-gray-300 hover:text-red-400 transition-colors"
-                            >
-                              <X className="h-3.5 w-3.5" strokeWidth={2} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Next Steps */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="nextSteps" className="block text-sm font-medium text-gray-700">
-                  Next Steps
-                  <span className="ml-1.5 text-xs text-gray-400 font-normal">(optional)</span>
-                </label>
-                {nextSteps.trim().length > 0 && (
-                  <span className={`text-xs font-medium ${nextSteps.trim().length >= MIN ? 'text-green-600' : 'text-gray-400'}`}>
-                    {nextSteps.trim().length} / {MIN} chars
-                  </span>
-                )}
-              </div>
-              <textarea
-                id="nextSteps"
-                rows={5}
-                value={nextSteps}
-                onChange={(e) => setNextSteps(e.target.value)}
-                placeholder="What are the action items or next steps for the group?"
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
-              />
-              <p className="mt-1 text-xs text-gray-400">Minimum 600 characters if provided</p>
             </div>
 
             {/* Next Meeting */}
