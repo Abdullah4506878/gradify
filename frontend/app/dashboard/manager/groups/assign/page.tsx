@@ -11,6 +11,11 @@ import {
   User,
   ArrowLeft,
   Check,
+  ClipboardCheck,
+  ClipboardList,
+  FileText,
+  BarChart2,
+  BookOpen,
 } from 'lucide-react';
 import {
   Select,
@@ -26,7 +31,11 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
   { label: 'Students', href: '/dashboard/manager/students', icon: Users },
   { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
+  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
   { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
+  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
+  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
+  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
   { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
@@ -36,6 +45,8 @@ interface Supervisor {
   id: number;
   name: string | null;
   email: string;
+  maxGroups: number;
+  assignedGroupsCount: number;
 }
 
 interface Group {
@@ -72,11 +83,16 @@ export default function AssignSupervisorPage() {
       setErrors((prev) => ({ ...prev, [groupId]: 'Please select a supervisor.' }));
       return;
     }
+    const sup = supervisors.find((s) => String(s.id) === supervisorId);
+    if (sup && sup.assignedGroupsCount >= sup.maxGroups) {
+      setErrors((prev) => ({ ...prev, [groupId]: `${sup.name ?? sup.email} is at full capacity (${sup.assignedGroupsCount}/${sup.maxGroups}).` }));
+      return;
+    }
     setErrors((prev) => { const n = { ...prev }; delete n[groupId]; return n; });
     setAssigning((prev) => ({ ...prev, [groupId]: true }));
     try {
-      await api.post(`/groups/${groupId}/preferences`, {
-        preferences: [{ supervisorId: parseInt(supervisorId, 10), preference: 1 }],
+      await api.post(`/groups/${groupId}/assign`, {
+        supervisorId: parseInt(supervisorId, 10),
       });
       setAssigned((prev) => ({ ...prev, [groupId]: true }));
     } catch (err: unknown) {
@@ -133,7 +149,7 @@ export default function AssignSupervisorPage() {
                   Members
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Current Supervisor
+                  Student Preferences
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Assign
@@ -145,7 +161,6 @@ export default function AssignSupervisorPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {groups.map((group) => {
-                const topPref = group.preferences.find((p) => p.preference === 1);
                 const isAssigned = assigned[group.id];
                 return (
                   <tr key={group.id} className="hover:bg-gray-50 transition-colors">
@@ -162,14 +177,24 @@ export default function AssignSupervisorPage() {
                     {/* Members count */}
                     <td className="px-6 py-4 text-sm text-gray-500">{group.members.length}</td>
 
-                    {/* Current supervisor */}
+                    {/* Student preferences P1/P2/P3 */}
                     <td className="px-6 py-4">
-                      {topPref ? (
-                        <span className="text-sm text-gray-900">
-                          {topPref.supervisor?.name ?? topPref.supervisor?.email}
-                        </span>
+                      {group.preferences.length === 0 ? (
+                        <span className="text-xs text-gray-400 italic">None submitted</span>
                       ) : (
-                        <span className="text-sm text-gray-400 italic">Not Assigned</span>
+                        <div className="space-y-0.5">
+                          {[1, 2, 3].map((rank) => {
+                            const pref = group.preferences.find((p) => p.preference === rank);
+                            return pref ? (
+                              <div key={rank} className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-indigo-500 w-5">P{rank}</span>
+                                <span className="text-xs text-gray-700">
+                                  {pref.supervisor?.name ?? pref.supervisor?.email}
+                                </span>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
                       )}
                     </td>
 
@@ -189,11 +214,14 @@ export default function AssignSupervisorPage() {
                             <SelectValue placeholder={supervisors.length === 0 ? 'No supervisors' : 'Select supervisor'} />
                           </SelectTrigger>
                           <SelectContent>
-                            {supervisors.map((s) => (
-                              <SelectItem key={s.id} value={String(s.id)}>
-                                {s.name ?? s.email}
-                              </SelectItem>
-                            ))}
+                            {supervisors.map((s) => {
+                              const isFull = s.assignedGroupsCount >= s.maxGroups;
+                              return (
+                                <SelectItem key={s.id} value={String(s.id)} disabled={isFull}>
+                                  {s.name ?? s.email} ({s.assignedGroupsCount}/{s.maxGroups} assigned){isFull ? ' — Full' : ''}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                         {errors[group.id] && (

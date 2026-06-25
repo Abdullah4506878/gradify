@@ -3,8 +3,8 @@ import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 
 const REVIEW_STATUSES = [
   TaskStatus.APPROVED,
+  TaskStatus.MINOR_ISSUES,
   TaskStatus.REJECTED,
-  TaskStatus.ACCEPTED_MINOR_ISSUES,
 ] as const;
 
 export class ReviewTaskDto {

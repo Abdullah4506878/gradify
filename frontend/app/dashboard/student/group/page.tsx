@@ -15,6 +15,7 @@ import {
   Lightbulb,
   AlertCircle,
   XCircle,
+  FileText,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -38,14 +39,17 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/student', icon: LayoutDashboard },
   { label: 'My Group', href: '/dashboard/student/group', icon: Users },
   { label: 'Tasks', href: '/dashboard/student/tasks', icon: ClipboardList },
+  { label: 'Minutes of Meeting', href: '/dashboard/student/mom', icon: FileText },
   { label: 'Profile', href: '/dashboard/student/profile', icon: User },
 ];
 
 type GroupStatus = 'FORMING' | 'ACTIVE' | 'COMPLETED';
+type FypRole = 'DOCUMENTATION' | 'DEVELOPMENT';
 
 interface Member {
   id: number;
   userId: number;
+  fypRole?: FypRole | null;
   user: { id: number; name: string | null; email: string };
 }
 
@@ -127,6 +131,12 @@ export default function StudentGroupPage() {
   const [p3, setP3] = useState('');
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+
+  // FYP Role selection
+  const [roleConfirmOpen, setRoleConfirmOpen] = useState(false);
+  const [pendingRole, setPendingRole] = useState<FypRole | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   const loadGroup = useCallback(async () => {
     try {
@@ -268,8 +278,26 @@ export default function StudentGroupPage() {
     }
   };
 
+  const handleConfirmRole = async () => {
+    if (!pendingRole) return;
+    setRoleLoading(true);
+    setRoleError(null);
+    try {
+      await api.patch('/groups/my-role', { role: pendingRole });
+      setRoleConfirmOpen(false);
+      setPendingRole(null);
+      await loadGroup();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setRoleError(typeof msg === 'string' ? msg : 'Failed to set role. Please try again.');
+    } finally {
+      setRoleLoading(false);
+    }
+  };
+
   const isLeader = group?.leader?.id === user?.id;
   const status = group ? (STATUS_STYLES[group.status] ?? STATUS_STYLES.FORMING) : null;
+  const myEnrollment = group?.members.find((m) => m.user?.id === user?.id || m.userId === user?.id);
 
   console.log('Proposal state:', { proposalLoading, proposal, isLeader });
 
@@ -474,6 +502,44 @@ export default function StudentGroupPage() {
             </CardContent>
           </Card>
 
+          {/* FYP Role card */}
+          <Card className="border-gray-200 shadow-none">
+            <CardContent className="pt-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4">My FYP Role</h2>
+              {myEnrollment?.fypRole ? (
+                <div className="space-y-1.5">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myEnrollment.fypRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {myEnrollment.fypRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+                  </span>
+                  <p className="text-xs text-gray-400">This role is permanent for FYP-1 and FYP-2</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setPendingRole('DOCUMENTATION'); setRoleError(null); setRoleConfirmOpen(true); }}
+                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
+                    >
+                      📄 Documentation
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPendingRole('DEVELOPMENT'); setRoleError(null); setRoleConfirmOpen(true); }}
+                      className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-500 transition-colors"
+                    >
+                      💻 Development
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-600 font-medium">⚠️ This selection is permanent and cannot be changed</p>
+                  {roleError && (
+                    <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{roleError}</div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Supervisor Preferences card */}
           <Card className="border-gray-200 shadow-none">
             <CardContent className="pt-6">
@@ -640,6 +706,46 @@ export default function StudentGroupPage() {
               >
                 {addMemberLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {addMemberLoading ? 'Adding…' : 'Add Member'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Role Confirmation Dialog ── */}
+      <Dialog open={roleConfirmOpen} onOpenChange={(open) => { if (!open) { setRoleConfirmOpen(false); setPendingRole(null); } }}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Confirm Role Selection</DialogTitle>
+          </DialogHeader>
+          <div className="pt-2 space-y-4">
+            <p className="text-sm text-gray-600">
+              Are you sure you want to select{' '}
+              <span className="font-semibold text-gray-900">
+                {pendingRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+              </span>
+              ? This cannot be changed for FYP-1 and FYP-2.
+            </p>
+            {roleError && (
+              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{roleError}</div>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setRoleConfirmOpen(false); setPendingRole(null); }}
+                disabled={roleLoading}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRole}
+                disabled={roleLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {roleLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {roleLoading ? 'Confirming…' : 'Confirm'}
               </button>
             </div>
           </div>

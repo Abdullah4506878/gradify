@@ -32,6 +32,10 @@ export class MomService {
         decisions: dto.decisions,
         nextSteps: dto.nextSteps,
         attendees: dto.attendees ?? '',
+        actionItems: dto.actionItems,
+        nextMeetingDate: dto.nextMeetingDate,
+        nextMeetingTime: dto.nextMeetingTime,
+        nextMeetingVenue: dto.nextMeetingVenue,
       },
       include: MOM_INCLUDE,
     });
@@ -115,6 +119,7 @@ export class MomService {
         select: { id: true },
       });
       const managerIds = managers.map((m) => m.id);
+      managerIds.forEach((uid) => console.log('Sending MOM notification to manager userId:', uid));
       if (managerIds.length > 0) {
         this.notificationService.createMany(
           managerIds,

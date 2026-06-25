@@ -23,4 +23,20 @@ export class CreateMomDto {
   @IsNotEmpty()
   @IsString()
   attendees: string;
+
+  @IsOptional()
+  @IsString()
+  actionItems?: string;
+
+  @IsOptional()
+  @IsString()
+  nextMeetingDate?: string;
+
+  @IsOptional()
+  @IsString()
+  nextMeetingTime?: string;
+
+  @IsOptional()
+  @IsString()
+  nextMeetingVenue?: string;
 }

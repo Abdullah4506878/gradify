@@ -12,7 +12,9 @@ import {
   ArrowLeft,
   CheckCircle,
   ClipboardCheck,
+  ClipboardList,
   Printer,
+  Lock,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
@@ -21,12 +23,18 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
   { label: 'Minutes of Meeting', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Tasks', href: '/dashboard/supervisor/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
 ];
 
 type MOMStatus = 'DRAFT' | 'SUBMITTED';
+
+interface ActionItem {
+  sr: number;
+  description: string;
+}
 
 interface MOMDetail {
   id: number;
@@ -36,6 +44,11 @@ interface MOMDetail {
   discussion: string;
   decisions: string;
   nextSteps?: string | null;
+  attendees?: string | null;
+  actionItems?: string | null;
+  nextMeetingDate?: string | null;
+  nextMeetingTime?: string | null;
+  nextMeetingVenue?: string | null;
   status: MOMStatus;
   group?: { fypId: string };
 }
@@ -56,6 +69,17 @@ function Field({ label, value }: { label: string; value: string | null | undefin
       </p>
     </div>
   );
+}
+
+function parseActionItems(raw: string | null | undefined): ActionItem[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as ActionItem[];
+  } catch {
+    // ignore
+  }
+  return [];
 }
 
 export default function MOMDetailPage() {
@@ -127,63 +151,123 @@ export default function MOMDetailPage() {
       `}</style>
 
       {/* Hidden print area */}
-      {mom && (
-        <div id="mom-print-area" style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-          {/* University header */}
-          <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
-            {!logoError && (
-              <img
-                src="/superior-logo.png"
-                alt="Superior University"
-                style={{ height: '72px', margin: '0 auto 8px', display: 'block' }}
-                onError={() => setLogoError(true)}
-              />
-            )}
-            <div style={{ fontWeight: '700', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.12em', color: '#1e293b' }}>
-              The Superior University Lahore
-            </div>
-            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-              Department of Software Engineering
-            </div>
-            <div style={{ marginTop: '10px', display: 'inline-block', background: '#1e293b', padding: '4px 20px', borderRadius: '4px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'white' }}>
-                Minutes of Meeting
-              </span>
-            </div>
-          </div>
-
-          {/* Meta table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
-            <tbody>
-              <tr>
-                <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', width: '130px', background: '#f8fafc' }}>Group</td>
-                <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{mom.group?.fypId ?? `Group #${mom.groupId}`}</td>
-                <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', width: '120px', background: '#f8fafc' }}>Status</td>
-                <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{STATUS_STYLES[mom.status]?.label ?? 'Draft'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Meeting Date</td>
-                <td colSpan={3} style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{meetingDateFormatted}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Content sections */}
-          {[
-            { label: 'Agenda', value: mom.agenda },
-            { label: 'Discussion', value: mom.discussion },
-            { label: 'Decisions', value: mom.decisions },
-            ...(mom.nextSteps ? [{ label: 'Next Steps', value: mom.nextSteps }] : []),
-          ].map(({ label, value }) => (
-            <div key={label} style={{ marginBottom: '16px' }}>
-              <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
-                {label}
+      {mom && (() => {
+        const printItems = parseActionItems(mom.actionItems);
+        return (
+          <div id="mom-print-area" style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
+              {!logoError && (
+                <img
+                  src="/superior-logo.png"
+                  alt="Superior University"
+                  style={{ height: '72px', margin: '0 auto 8px', display: 'block' }}
+                  onError={() => setLogoError(true)}
+                />
+              )}
+              <div style={{ fontWeight: '700', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.12em', color: '#1e293b' }}>
+                The Superior University Lahore
               </div>
-              <p style={{ fontSize: '12px', color: '#1e293b', lineHeight: '1.7', whiteSpace: 'pre-wrap', margin: 0 }}>{value}</p>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                Department of Software Engineering
+              </div>
+              <div style={{ marginTop: '10px', display: 'inline-block', background: '#1e293b', padding: '4px 20px', borderRadius: '4px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'white' }}>
+                  Minutes of Meeting
+                </span>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', width: '130px', background: '#f8fafc' }}>Group</td>
+                  <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{mom.group?.fypId ?? `Group #${mom.groupId}`}</td>
+                  <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', width: '120px', background: '#f8fafc' }}>Status</td>
+                  <td style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{STATUS_STYLES[mom.status]?.label ?? 'Draft'}</td>
+                </tr>
+                <tr>
+                  <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Meeting Date</td>
+                  <td colSpan={3} style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{meetingDateFormatted}</td>
+                </tr>
+                {mom.attendees && (
+                  <tr>
+                    <td style={{ fontWeight: '600', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Attendees</td>
+                    <td colSpan={3} style={{ padding: '6px 10px', border: '1px solid #e2e8f0' }}>{mom.attendees}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            {[
+              { label: 'Agenda', value: mom.agenda },
+              { label: 'Discussion', value: mom.discussion },
+              { label: 'Decisions', value: mom.decisions },
+              ...(mom.nextSteps ? [{ label: 'Next Steps', value: mom.nextSteps }] : []),
+            ].map(({ label, value }) => (
+              <div key={label} style={{ marginBottom: '16px' }}>
+                <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
+                  {label}
+                </div>
+                <p style={{ fontSize: '12px', color: '#1e293b', lineHeight: '1.7', whiteSpace: 'pre-wrap', margin: 0 }}>{value}</p>
+              </div>
+            ))}
+
+            {printItems.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
+                  Action Items
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', textAlign: 'left', width: '40px' }}>Sr#</th>
+                      <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', textAlign: 'left' }}>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printItems.map((item) => (
+                      <tr key={item.sr}>
+                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{item.sr}</td>
+                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{item.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {(mom.nextMeetingDate || mom.nextMeetingTime || mom.nextMeetingVenue) && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>
+                  Next Meeting
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <tbody>
+                    {mom.nextMeetingDate && (
+                      <tr>
+                        <td style={{ fontWeight: '600', padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', width: '80px' }}>Date</td>
+                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{mom.nextMeetingDate}</td>
+                      </tr>
+                    )}
+                    {mom.nextMeetingTime && (
+                      <tr>
+                        <td style={{ fontWeight: '600', padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Time</td>
+                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{mom.nextMeetingTime}</td>
+                      </tr>
+                    )}
+                    {mom.nextMeetingVenue && (
+                      <tr>
+                        <td style={{ fontWeight: '600', padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>Venue</td>
+                        <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{mom.nextMeetingVenue}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Screen UI */}
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -224,109 +308,182 @@ export default function MOMDetailPage() {
           <p className="text-sm font-medium text-gray-500">Meeting not found</p>
           <p className="mt-1 text-xs text-gray-400">This record may have been deleted or does not exist.</p>
         </div>
-      ) : mom ? (
-        <div className="max-w-2xl space-y-4">
-          {/* Flash */}
-          {flash && (
-            <div
-              className={`rounded-lg border px-4 py-3 text-sm ${
-                flash.type === 'success'
-                  ? 'border-green-100 bg-green-50 text-green-700'
-                  : 'border-red-100 bg-red-50 text-red-700'
-              }`}
-            >
-              {flash.text}
-            </div>
-          )}
+      ) : mom ? (() => {
+        const parsedItems = parseActionItems(mom.actionItems);
+        const hasNextMeeting = mom.nextMeetingDate || mom.nextMeetingTime || mom.nextMeetingVenue;
+        return (
+          <div className="max-w-2xl space-y-4">
+            {/* Flash */}
+            {flash && (
+              <div
+                className={`rounded-lg border px-4 py-3 text-sm ${
+                  flash.type === 'success'
+                    ? 'border-green-100 bg-green-50 text-green-700'
+                    : 'border-red-100 bg-red-50 text-red-700'
+                }`}
+              >
+                {flash.text}
+              </div>
+            )}
 
-          {/* Header card */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            {/* University header strip */}
-            <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 text-center">
-              <div className="flex justify-center mb-2">
-                {logoError ? (
-                  <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-gray-400" strokeWidth={1.75} />
+            {/* Header card */}
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 text-center">
+                <div className="flex justify-center mb-2">
+                  {logoError ? (
+                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-gray-400" strokeWidth={1.75} />
+                    </div>
+                  ) : (
+                    <img
+                      src="/superior-logo.png"
+                      alt="Superior University"
+                      className="h-10 w-10 object-contain"
+                      onError={() => setLogoError(true)}
+                    />
+                  )}
+                </div>
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-800">
+                  The Superior University Lahore
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">Department of Software Engineering</p>
+                <div className="mt-2 inline-block rounded bg-gray-800 px-3 py-0.5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-white">Minutes of Meeting</p>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Group</p>
+                    <p className="text-xl font-bold font-mono text-indigo-600">
+                      {mom.group?.fypId ?? `Group #${mom.groupId}`}
+                    </p>
                   </div>
-                ) : (
-                  <img
-                    src="/superior-logo.png"
-                    alt="Superior University"
-                    className="h-10 w-10 object-contain"
-                    onError={() => setLogoError(true)}
-                  />
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      STATUS_STYLES[mom.status]?.className ?? STATUS_STYLES.DRAFT.className
+                    }`}
+                  >
+                    {STATUS_STYLES[mom.status]?.label ?? 'Draft'}
+                  </span>
+                </div>
+
+                <div className="text-sm text-gray-500 mb-2">
+                  <span className="font-medium text-gray-700">Meeting Date: </span>
+                  {meetingDateFormatted}
+                </div>
+
+                {mom.attendees && (
+                  <div className="text-sm text-gray-500">
+                    <span className="font-medium text-gray-700">Attendees: </span>
+                    {mom.attendees}
+                  </div>
                 )}
               </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-800">
-                The Superior University Lahore
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">Department of Software Engineering</p>
-              <div className="mt-2 inline-block rounded bg-gray-800 px-3 py-0.5">
-                <p className="text-xs font-bold uppercase tracking-widest text-white">Minutes of Meeting</p>
-              </div>
             </div>
 
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-5">
+            {/* Content card */}
+            <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
+              <Field label="Agenda" value={mom.agenda} />
+              <div className="border-t border-gray-100" />
+              <Field label="Discussion" value={mom.discussion} />
+              <div className="border-t border-gray-100" />
+              <Field label="Decisions" value={mom.decisions} />
+              {mom.nextSteps && (
+                <>
+                  <div className="border-t border-gray-100" />
+                  <Field label="Next Steps" value={mom.nextSteps} />
+                </>
+              )}
+
+              {/* Action Items */}
+              {parsedItems.length > 0 && (
+                <>
+                  <div className="border-t border-gray-100" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Action Items</p>
+                    <div className="rounded-lg border border-gray-100 overflow-hidden">
+                      <table className="min-w-full">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">Sr#</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {parsedItems.map((item) => (
+                            <tr key={item.sr}>
+                              <td className="px-3 py-2.5 text-xs text-gray-400 tabular-nums">{item.sr}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-700">{item.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Next Meeting */}
+              {hasNextMeeting && (
+                <>
+                  <div className="border-t border-gray-100" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Next Meeting</p>
+                    <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 grid grid-cols-3 gap-3">
+                      {mom.nextMeetingDate && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-0.5">Date</p>
+                          <p className="text-sm text-gray-700 font-medium">{mom.nextMeetingDate}</p>
+                        </div>
+                      )}
+                      {mom.nextMeetingTime && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-0.5">Time</p>
+                          <p className="text-sm text-gray-700 font-medium">{mom.nextMeetingTime}</p>
+                        </div>
+                      )}
+                      {mom.nextMeetingVenue && (
+                        <div className={!mom.nextMeetingDate && !mom.nextMeetingTime ? '' : 'col-span-1'}>
+                          <p className="text-xs text-gray-400 mb-0.5">Venue</p>
+                          <p className="text-sm text-gray-700 font-medium">{mom.nextMeetingVenue}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Submit / Immutability notice */}
+            {mom.status === 'DRAFT' ? (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Group</p>
-                  <p className="text-xl font-bold font-mono text-indigo-600">
-                    {mom.group?.fypId ?? `Group #${mom.groupId}`}
+                  <p className="text-sm font-medium text-indigo-900">Ready to submit?</p>
+                  <p className="text-xs text-indigo-600 mt-0.5">
+                    Once submitted, this record cannot be edited.
                   </p>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                    STATUS_STYLES[mom.status]?.className ?? STATUS_STYLES.DRAFT.className
-                  }`}
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0"
                 >
-                  {STATUS_STYLES[mom.status]?.label ?? 'Draft'}
-                </span>
+                  <CheckCircle className="h-4 w-4" strokeWidth={1.75} />
+                  {submitting ? 'Submitting…' : 'Submit'}
+                </button>
               </div>
-
-              <div className="text-sm text-gray-500">
-                <span className="font-medium text-gray-700">Meeting Date: </span>
-                {meetingDateFormatted}
+            ) : (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-5 py-4 flex items-center gap-3 text-sm text-gray-500">
+                <Lock className="h-4 w-4 shrink-0 text-gray-400" strokeWidth={1.75} />
+                This MOM has been submitted and cannot be edited.
               </div>
-            </div>
-          </div>
-
-          {/* Content card */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
-            <Field label="Agenda" value={mom.agenda} />
-            <div className="border-t border-gray-100" />
-            <Field label="Discussion" value={mom.discussion} />
-            <div className="border-t border-gray-100" />
-            <Field label="Decisions" value={mom.decisions} />
-            {mom.nextSteps && (
-              <>
-                <div className="border-t border-gray-100" />
-                <Field label="Next Steps" value={mom.nextSteps} />
-              </>
             )}
           </div>
-
-          {/* Submit action */}
-          {mom.status === 'DRAFT' && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-indigo-900">Ready to submit?</p>
-                <p className="text-xs text-indigo-600 mt-0.5">
-                  Once submitted, this record cannot be edited.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0"
-              >
-                <CheckCircle className="h-4 w-4" strokeWidth={1.75} />
-                {submitting ? 'Submitting…' : 'Submit'}
-              </button>
-            </div>
-          )}
-        </div>
-      ) : null}
+        );
+      })() : null}
     </DashboardLayout>
   );
 }

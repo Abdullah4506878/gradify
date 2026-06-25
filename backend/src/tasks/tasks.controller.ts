@@ -44,6 +44,13 @@ export class TasksController {
     return this.tasksService.findAll(req.user);
   }
 
+  @Get('manager/all')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  findAllManager() {
+    return this.tasksService.findAll({ id: 0, role: Role.MANAGER });
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.findOne(id);

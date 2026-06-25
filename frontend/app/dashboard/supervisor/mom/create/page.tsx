@@ -11,6 +11,9 @@ import {
   FileText,
   ArrowLeft,
   ClipboardCheck,
+  ClipboardList,
+  Plus,
+  X,
 } from 'lucide-react';
 import {
   Select,
@@ -26,6 +29,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
   { label: 'Minutes of Meeting', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Tasks', href: '/dashboard/supervisor/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },
@@ -34,6 +38,11 @@ const navItems = [
 interface Group {
   id: number;
   fypId: string;
+}
+
+interface ActionItem {
+  id: number;
+  description: string;
 }
 
 export default function CreateMOMPage() {
@@ -51,6 +60,12 @@ export default function CreateMOMPage() {
   const [decisions, setDecisions] = useState('');
   const [nextSteps, setNextSteps] = useState('');
 
+  const [actionItems, setActionItems] = useState<ActionItem[]>([{ id: 1, description: '' }]);
+  const [nextActionId, setNextActionId] = useState(2);
+  const [nextMeetingDate, setNextMeetingDate] = useState('');
+  const [nextMeetingTime, setNextMeetingTime] = useState('');
+  const [nextMeetingVenue, setNextMeetingVenue] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
@@ -62,6 +77,19 @@ export default function CreateMOMPage() {
       .finally(() => setGroupsLoading(false));
   }, []);
 
+  const addActionItem = () => {
+    setActionItems((prev) => [...prev, { id: nextActionId, description: '' }]);
+    setNextActionId((n) => n + 1);
+  };
+
+  const removeActionItem = (id: number) => {
+    setActionItems((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const updateActionItem = (id: number, description: string) => {
+    setActionItems((prev) => prev.map((a) => (a.id === id ? { ...a, description } : a)));
+  };
+
   const MIN = 600;
 
   const validate = (): string | null => {
@@ -70,6 +98,14 @@ export default function CreateMOMPage() {
     if (!agenda.trim()) return 'Agenda is required.';
     if (!discussion.trim()) return 'Discussion is required.';
     if (!decisions.trim()) return 'Decisions is required.';
+    const filledItems = actionItems.filter((a) => a.description.trim());
+    if (actionItems.some((a) => !a.description.trim()) && filledItems.length < actionItems.length) {
+      if (filledItems.length === 0 && actionItems.length === 1) {
+        // Single empty row — that's fine (optional)
+      } else {
+        return 'All action item descriptions must be filled in.';
+      }
+    }
     return null;
   };
 
@@ -82,6 +118,13 @@ export default function CreateMOMPage() {
     }
     setError(null);
     setSubmitting(true);
+
+    const filledItems = actionItems.filter((a) => a.description.trim());
+    const actionItemsJson =
+      filledItems.length > 0
+        ? JSON.stringify(filledItems.map((a, idx) => ({ sr: idx + 1, description: a.description.trim() })))
+        : undefined;
+
     try {
       await api.post('/mom', {
         groupId: parseInt(groupId, 10),
@@ -90,6 +133,10 @@ export default function CreateMOMPage() {
         discussion: discussion.trim(),
         decisions: decisions.trim(),
         nextSteps: nextSteps.trim() || undefined,
+        actionItems: actionItemsJson,
+        nextMeetingDate: nextMeetingDate || undefined,
+        nextMeetingTime: nextMeetingTime || undefined,
+        nextMeetingVenue: nextMeetingVenue.trim() || undefined,
       });
       router.push('/dashboard/supervisor/mom');
     } catch (err: unknown) {
@@ -247,6 +294,59 @@ export default function CreateMOMPage() {
               <p className="mt-1 text-xs text-gray-400">Minimum 600 characters</p>
             </div>
 
+            {/* Action Items */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Action Items</label>
+                <button
+                  type="button"
+                  onClick={addActionItem}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                  Add Item
+                </button>
+              </div>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">Sr#</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Item Description</th>
+                      <th className="px-3 py-2 w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {actionItems.map((item, idx) => (
+                      <tr key={item.id}>
+                        <td className="px-3 py-2.5 text-xs text-gray-500 tabular-nums">{idx + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={item.description}
+                            onChange={(e) => updateActionItem(item.id, e.target.value)}
+                            placeholder="Describe the action item…"
+                            className="w-full text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {actionItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeActionItem(item.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Next Steps */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -269,6 +369,44 @@ export default function CreateMOMPage() {
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
               />
               <p className="mt-1 text-xs text-gray-400">Minimum 600 characters if provided</p>
+            </div>
+
+            {/* Next Meeting */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">
+                Next Meeting
+                <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={nextMeetingDate}
+                    onChange={(e) => setNextMeetingDate(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Time</label>
+                  <input
+                    type="time"
+                    value={nextMeetingTime}
+                    onChange={(e) => setNextMeetingTime(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Venue</label>
+                  <input
+                    type="text"
+                    value={nextMeetingVenue}
+                    onChange={(e) => setNextMeetingVenue(e.target.value)}
+                    placeholder="e.g. Room 301, Lab Block"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Error */}

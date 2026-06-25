@@ -5,8 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { GroupStatus, Role, Semester } from '@prisma/client';
+import { FypRole, GroupStatus, ProposalStatus, Role, Semester } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { SupervisorPreferenceDto } from './dto/supervisor-preference.dto';
 
@@ -25,7 +26,10 @@ const GROUP_INCLUDE = {
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async create(leaderId: number, dto: CreateGroupDto, universityId: number) {
     const existing = await this.prisma.enrollment.findFirst({
@@ -54,7 +58,7 @@ export class GroupsService {
       user.role === Role.MANAGER
         ? {}
         : user.role === Role.SUPERVISOR
-          ? { preferences: { some: { supervisorId: user.id } } }
+          ? { preferences: { some: { preference: 1, supervisorId: user.id } } }
           : { members: { some: { userId: user.id } } };
 
     return this.prisma.group.findMany({ where, include: GROUP_INCLUDE });
@@ -111,7 +115,105 @@ export class GroupsService {
       })),
     });
 
+    // Notify all managers in this university
+    const managers = await this.prisma.user.findMany({
+      where: { role: Role.MANAGER, universityId: group.universityId },
+      select: { id: true },
+    });
+    const managerIds = managers.map((m) => m.id);
+    if (managerIds.length > 0) {
+      this.notificationService.createMany(
+        managerIds,
+        'Supervisor Preferences Submitted',
+        `Group ${group.fypId} has submitted their supervisor preferences`,
+        'PREFERENCE',
+        '/dashboard/manager/groups/assign',
+      ).catch(() => {});
+    }
+
     return this.findOne(groupId);
+  }
+
+  async assignSupervisor(groupId: number, supervisorId: number) {
+    const group = await this.findOne(groupId);
+
+    // Replace all existing preferences with the manager's assignment
+    await this.prisma.supervisorPreference.deleteMany({ where: { groupId } });
+    await this.prisma.supervisorPreference.create({
+      data: { groupId, supervisorId, preference: 1 },
+    });
+
+    const supervisor = await this.prisma.user.findUnique({
+      where: { id: supervisorId },
+      select: { name: true, email: true },
+    });
+    const supervisorName = supervisor?.name ?? supervisor?.email ?? 'Your supervisor';
+
+    // Notify assigned supervisor
+    console.log('Sending assignment notification to supervisor userId:', supervisorId);
+    this.notificationService.createNotification(
+      supervisorId,
+      'Group Assigned',
+      `You have been assigned as supervisor for group ${group.fypId}`,
+      'ASSIGNMENT',
+      '/dashboard/supervisor/groups',
+    ).catch(() => {});
+
+    // Notify all group members
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { groupId },
+      select: { userId: true },
+    });
+    const memberIds = [...new Set([...enrollments.map((e) => e.userId), group.leaderId])];
+    memberIds.forEach((uid) => console.log('Sending assignment notification to member userId:', uid));
+    this.notificationService.createMany(
+      memberIds,
+      'Supervisor Assigned',
+      `${supervisorName} has been assigned as your supervisor`,
+      'ASSIGNMENT',
+      '/dashboard/student/group',
+    ).catch(() => {});
+
+    return this.findOne(groupId);
+  }
+
+  async setMyRole(userId: number, role: FypRole) {
+    const enrollment = await this.prisma.enrollment.findFirst({
+      where: { userId },
+    });
+    if (!enrollment) throw new NotFoundException('No group enrollment found');
+
+    if (enrollment.fypRole !== null) {
+      throw new ForbiddenException('Role already selected and cannot be changed');
+    }
+
+    return this.prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { fypRole: role },
+    });
+  }
+
+  async getFypProjects() {
+    return this.prisma.group.findMany({
+      where: {
+        preferences: { some: { preference: 1 } },
+        proposal: { status: ProposalStatus.APPROVED },
+      },
+      include: {
+        proposal: {
+          select: {
+            id: true,
+            projectTitle: true,
+            problemStatement: true,
+            proposedSolution: true,
+          },
+        },
+        preferences: {
+          where: { preference: 1 },
+          include: { supervisor: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    });
   }
 
   async updateStatus(groupId: number, status: GroupStatus) {

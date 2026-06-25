@@ -10,6 +10,7 @@ import {
   FileText,
   Search,
   ClipboardCheck,
+  ClipboardList,
 } from 'lucide-react';
 import {
   Dialog,
@@ -24,6 +25,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/supervisor', icon: LayoutDashboard },
   { label: 'My Groups', href: '/dashboard/supervisor/groups', icon: FolderOpen },
   { label: 'Minutes of Meeting', href: '/dashboard/supervisor/mom', icon: FileText },
+  { label: 'Tasks', href: '/dashboard/supervisor/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/supervisor/proposals', icon: ClipboardCheck },
   { label: 'Schedule', href: '/dashboard/supervisor/schedule', icon: Calendar },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: User },

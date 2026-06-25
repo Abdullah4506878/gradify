@@ -61,8 +61,17 @@ export class ProposalService {
     return proposal;
   }
 
-  findAll() {
+  async findAll(user?: { id: number; role: Role }) {
+    let where = {};
+    if (user?.role === Role.SUPERVISOR) {
+      const assigned = await this.prisma.supervisorPreference.findMany({
+        where: { supervisorId: user.id, preference: 1 },
+        select: { groupId: true },
+      });
+      where = { groupId: { in: assigned.map((a) => a.groupId) } };
+    }
     return this.prisma.proposal.findMany({
+      where,
       include: PROPOSAL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
@@ -123,6 +132,7 @@ export class ProposalService {
         ]),
       ];
 
+      memberIds.forEach((uid) => console.log('Sending notification to userId:', uid));
       this.notificationService.createMany(
         memberIds,
         dto.status === ProposalStatus.APPROVED ? 'Proposal Approved ✓' : 'Proposal Needs Revision',

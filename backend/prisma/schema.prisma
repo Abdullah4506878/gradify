@@ -44,6 +44,11 @@ enum MOMStatus {
   SUBMITTED
 }
 
+enum FypRole {
+  DOCUMENTATION
+  DEVELOPMENT
+}
+
 enum TaskType {
   DOCUMENTATION
   DEVELOPMENT_WEB
@@ -54,8 +59,8 @@ enum TaskStatus {
   PENDING
   SUBMITTED
   APPROVED
+  MINOR_ISSUES
   REJECTED
-  ACCEPTED_MINOR_ISSUES
 }
 
 enum ProposalStatus {
@@ -71,6 +76,7 @@ model User {
   rollNumber            String?                @unique
   password              String
   role                  Role                   @default(STUDENT)
+  maxGroups             Int                    @default(5)
   refreshToken          String?
   universityId          Int?
   university            University?            @relation(fields: [universityId], references: [id])
@@ -82,6 +88,7 @@ model User {
   supervisedMOMs        MeetingMinutes[]       @relation("SupervisorMOM")
   assignedTasks         Task[]                 @relation("TaskAssignee")
   supervisedTasks       Task[]                 @relation("TaskSupervisor")
+  taskSubmissions       TaskSubmission[]
   taskReviews           TaskReview[]           @relation("TaskReviewer")
   notifications         Notification[]
 }
@@ -171,6 +178,7 @@ model Enrollment {
   userId    Int
   groupId   Int
   status    EnrollmentStatus @default(ACTIVE)
+  fypRole   FypRole?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   user      User             @relation(fields: [userId], references: [id])
@@ -199,9 +207,13 @@ model MeetingMinutes {
   agenda       String
   discussion   String
   decisions    String
-  nextSteps    String?
-  attendees    String
-  status       MOMStatus @default(DRAFT)
+  nextSteps        String?
+  attendees        String
+  actionItems      String?
+  nextMeetingDate  String?
+  nextMeetingTime  String?
+  nextMeetingVenue String?
+  status           MOMStatus @default(DRAFT)
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -221,32 +233,34 @@ model Task {
   status       TaskStatus      @default(PENDING)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  group        Group           @relation(fields: [groupId], references: [id])
-  assignedTo   User            @relation("TaskAssignee", fields: [assignedToId], references: [id])
-  supervisor   User            @relation("TaskSupervisor", fields: [supervisorId], references: [id])
-  submission   TaskSubmission?
-  review       TaskReview?
+  group        Group            @relation(fields: [groupId], references: [id])
+  assignedTo   User             @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  supervisor   User             @relation("TaskSupervisor", fields: [supervisorId], references: [id])
+  submissions  TaskSubmission[]
+  reviews      TaskReview[]
 }
 
 model TaskSubmission {
   id          Int      @id @default(autoincrement())
-  taskId      Int      @unique
-  description String
+  taskId      Int
+  userId      Int
+  description String?
   fileUrl     String?
-  githubUrl   String?
-  submittedAt DateTime @default(now())
+  githubLink  String?
+  createdAt   DateTime @default(now())
   task        Task     @relation(fields: [taskId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model TaskReview {
   id         Int        @id @default(autoincrement())
-  taskId     Int        @unique
-  reviewedBy Int
+  taskId     Int
+  reviewerId Int
   status     TaskStatus
   reason     String
-  reviewedAt DateTime   @default(now())
+  createdAt  DateTime   @default(now())
   task       Task       @relation(fields: [taskId], references: [id])
-  reviewer   User       @relation("TaskReviewer", fields: [reviewedBy], references: [id])
+  reviewer   User       @relation("TaskReviewer", fields: [reviewerId], references: [id])
 }
 
 model Proposal {

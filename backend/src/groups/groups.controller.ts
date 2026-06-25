@@ -10,7 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { GroupStatus, Role } from '@prisma/client';
+import { FypRole, GroupStatus, Role } from '@prisma/client';
 import { IsEnum as CVIsEnum } from 'class-validator';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -54,6 +54,20 @@ export class GroupsController {
     return this.groupsService.findAll(req.user);
   }
 
+  @Get('fyp-projects')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  getFypProjects() {
+    return this.groupsService.getFypProjects();
+  }
+
+  @Patch('my-role')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  setMyRole(@Req() req: AuthRequest, @Body('role') role: FypRole) {
+    return this.groupsService.setMyRole(req.user.id, role);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.groupsService.findOne(id);
@@ -78,6 +92,16 @@ export class GroupsController {
     @Body() dto: SupervisorPreferenceDto,
   ) {
     return this.groupsService.submitPreferences(groupId, req.user.id, dto);
+  }
+
+  @Post(':id/assign')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  assignSupervisor(
+    @Param('id', ParseIntPipe) groupId: number,
+    @Body('supervisorId', ParseIntPipe) supervisorId: number,
+  ) {
+    return this.groupsService.assignSupervisor(groupId, supervisorId);
   }
 
   @Patch(':id/status')

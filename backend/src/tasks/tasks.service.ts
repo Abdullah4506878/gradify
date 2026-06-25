@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -16,10 +15,8 @@ const TASK_INCLUDE = {
   group: { select: { id: true, fypId: true } },
   assignedTo: { select: { id: true, name: true, email: true } },
   supervisor: { select: { id: true, name: true, email: true } },
-  submission: true,
-  review: {
-    include: { reviewer: { select: { id: true, name: true, email: true } } },
-  },
+  submissions: { include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'desc' as const } },
+  reviews: { include: { reviewer: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'desc' as const } },
 } as const;
 
 @Injectable()
@@ -43,21 +40,13 @@ export class TasksService {
       include: TASK_INCLUDE,
     });
 
-    // Notify all group members
-    const enrollments = await this.prisma.enrollment.findMany({
-      where: { groupId: dto.groupId },
-      select: { userId: true },
-    });
-    const memberIds = enrollments.map((e) => e.userId);
-    if (memberIds.length > 0) {
-      this.notificationService.createMany(
-        memberIds,
-        'New Task Assigned',
-        `New task "${task.title}" has been assigned to your group`,
-        'TASK',
-        '/dashboard/student/tasks',
-      ).catch(() => {});
-    }
+    this.notificationService.createNotification(
+      dto.assignedToId,
+      'New Task Assigned',
+      `New task "${task.title}" has been assigned to you`,
+      'TASK',
+      '/dashboard/student/tasks',
+    ).catch(() => {});
 
     return task;
   }
@@ -89,44 +78,88 @@ export class TasksService {
     if (task.assignedToId !== userId) {
       throw new ForbiddenException('This task is not assigned to you');
     }
-    if (task.status !== TaskStatus.PENDING) {
-      throw new BadRequestException('Only pending tasks can be submitted');
+
+    const submittableStatuses: TaskStatus[] = [TaskStatus.PENDING, TaskStatus.MINOR_ISSUES, TaskStatus.REJECTED];
+    if (!submittableStatuses.includes(task.status)) {
+      throw new BadRequestException('Task cannot be submitted in its current state');
     }
 
-    const fileUrl = file ? `/uploads/${file.filename}` : dto.fileUrl;
+    if (!file) {
+      throw new BadRequestException('A file attachment is required for submission');
+    }
+
+    const fileUrl = `/uploads/${file.filename}`;
 
     await this.prisma.taskSubmission.create({
-      data: { taskId: id, description: dto.description, fileUrl, githubUrl: dto.githubUrl },
+      data: {
+        taskId: id,
+        userId,
+        description: dto.description,
+        fileUrl,
+        githubLink: dto.githubLink,
+      },
     });
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id },
       data: { status: TaskStatus.SUBMITTED },
       include: TASK_INCLUDE,
     });
+
+    this.notificationService.createNotification(
+      task.supervisorId,
+      'Task Submitted',
+      `Student has submitted task "${task.title}" for review`,
+      'TASK_SUBMISSION',
+      '/dashboard/supervisor/tasks',
+    ).catch(() => {});
+
+    return updated;
   }
 
-  async reviewTask(id: number, supervisorId: number, dto: ReviewTaskDto) {
+  async reviewTask(id: number, reviewerId: number, dto: ReviewTaskDto) {
     const task = await this.findOne(id);
 
-    if (task.supervisorId !== supervisorId) {
+    if (task.supervisorId !== reviewerId) {
       throw new ForbiddenException('Only the supervisor who assigned this task can review it');
     }
     if (task.status !== TaskStatus.SUBMITTED) {
       throw new BadRequestException('Only submitted tasks can be reviewed');
     }
-    if (task.review) {
-      throw new ConflictException('This task has already been reviewed');
-    }
 
     await this.prisma.taskReview.create({
-      data: { taskId: id, reviewedBy: supervisorId, status: dto.status, reason: dto.reason },
+      data: { taskId: id, reviewerId, status: dto.status, reason: dto.reason },
     });
 
-    return this.prisma.task.update({
+    const newStatus = dto.status === TaskStatus.REJECTED ? TaskStatus.PENDING : dto.status;
+
+    const updated = await this.prisma.task.update({
       where: { id },
-      data: { status: dto.status },
+      data: { status: newStatus },
       include: TASK_INCLUDE,
     });
+
+    let notifTitle: string;
+    let notifMessage: string;
+    if (dto.status === TaskStatus.APPROVED) {
+      notifTitle = 'Task Approved ✓';
+      notifMessage = `Your task "${task.title}" has been approved`;
+    } else if (dto.status === TaskStatus.MINOR_ISSUES) {
+      notifTitle = 'Task Has Minor Issues';
+      notifMessage = `Your task "${task.title}" has minor issues that need to be addressed`;
+    } else {
+      notifTitle = 'Task Rejected';
+      notifMessage = `Your task "${task.title}" has been rejected. Please review the feedback and resubmit`;
+    }
+
+    this.notificationService.createNotification(
+      task.assignedToId,
+      notifTitle,
+      notifMessage,
+      'TASK_REVIEW',
+      '/dashboard/student/tasks',
+    ).catch(() => {});
+
+    return updated;
   }
 }

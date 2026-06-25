@@ -18,6 +18,7 @@ const safeUserSelect = {
   name: true,
   rollNumber: true,
   role: true,
+  maxGroups: true,
   universityId: true,
   university: true,
   createdAt: true,
@@ -40,14 +41,53 @@ export class UsersService {
     await this.prisma.user.update({ where: { id }, data: { refreshToken } });
   }
 
-  findAll(filters: { role?: Role; universityId?: number }) {
-    return this.prisma.user.findMany({
+  async findAll(filters: { role?: Role; universityId?: number }) {
+    const users = await this.prisma.user.findMany({
       where: {
         ...(filters.role && { role: filters.role }),
         ...(filters.universityId && { universityId: filters.universityId }),
       },
       select: safeUserSelect,
     });
+
+    if (filters.role === Role.SUPERVISOR) {
+      const assignedCounts = await this.prisma.supervisorPreference.groupBy({
+        by: ['supervisorId'],
+        where: { preference: 1 },
+        _count: { supervisorId: true },
+      });
+      const countMap = new Map(assignedCounts.map((a) => [a.supervisorId, a._count.supervisorId]));
+      return users.map((u) => ({ ...u, assignedGroupsCount: countMap.get(u.id) ?? 0 }));
+    }
+
+    return users;
+  }
+
+  async updateWorkload(id: number, maxGroups: number) {
+    if (maxGroups < 1 || maxGroups > 10) {
+      throw new BadRequestException('maxGroups must be between 1 and 10');
+    }
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User #${id} not found`);
+    if (user.role !== Role.SUPERVISOR) {
+      throw new BadRequestException('Can only update workload for supervisors');
+    }
+    const { password: _, refreshToken: __, ...safe } = await this.prisma.user.update({
+      where: { id },
+      data: { maxGroups },
+    });
+    return safe;
+  }
+
+  async updateWorkloadBulk(maxGroups: number) {
+    if (maxGroups < 1 || maxGroups > 10) {
+      throw new BadRequestException('maxGroups must be between 1 and 10');
+    }
+    const result = await this.prisma.user.updateMany({
+      where: { role: Role.SUPERVISOR },
+      data: { maxGroups },
+    });
+    return { updated: result.count, maxGroups };
   }
 
   async findMe(id: number) {

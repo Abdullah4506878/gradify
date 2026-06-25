@@ -88,11 +88,28 @@ export class UsersController {
     return this.usersService.createUser(dto);
   }
 
+  @Patch('supervisors/workload-bulk')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  updateWorkloadBulk(@Body('maxGroups') maxGroups: number) {
+    return this.usersService.updateWorkloadBulk(Number(maxGroups));
+  }
+
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findMe(id);
+  }
+
+  @Patch(':id/workload')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  updateWorkload(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('maxGroups') maxGroups: number,
+  ) {
+    return this.usersService.updateWorkload(id, Number(maxGroups));
   }
 
   @Patch(':id')

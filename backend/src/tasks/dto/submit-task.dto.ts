@@ -1,15 +1,11 @@
-import { IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class SubmitTaskDto {
   @IsString()
-  @MinLength(100)
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @IsUrl()
   @IsOptional()
-  fileUrl?: string;
-
-  @IsUrl()
-  @IsOptional()
-  githubUrl?: string;
+  githubLink?: string;
 }

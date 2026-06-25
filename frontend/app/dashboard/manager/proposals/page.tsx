@@ -1,16 +1,19 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import {
   LayoutDashboard,
   Users,
   Briefcase,
   FolderOpen,
   BarChart,
+  BarChart2,
+  FileText,
   User,
   Search,
   ClipboardCheck,
+  ClipboardList,
+  BookOpen,
 } from 'lucide-react';
 import {
   Dialog,
@@ -25,7 +28,11 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
   { label: 'Students', href: '/dashboard/manager/students', icon: Users },
   { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
+  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
   { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
+  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
+  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
+  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
   { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
@@ -44,8 +51,6 @@ interface Proposal {
   createdAt: string;
   group: { id: number; fypId: string; leader: { id: number; name: string | null; email: string } };
 }
-
-type Flash = { type: 'success' | 'error'; text: string };
 
 const STATUS_STYLES: Record<ProposalStatus, { label: string; className: string }> = {
   PENDING: { label: 'Pending', className: 'bg-yellow-50 text-yellow-700' },
@@ -70,14 +75,6 @@ export default function ManagerProposalsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewProposal, setViewProposal] = useState<Proposal | null>(null);
-  const [managerComments, setManagerComments] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [flash, setFlash] = useState<Flash | null>(null);
-
-  const showFlash = (f: Flash) => {
-    setFlash(f);
-    setTimeout(() => setFlash(null), 4000);
-  };
 
   useEffect(() => {
     api.get<Proposal[]>('/proposals')
@@ -86,24 +83,6 @@ export default function ManagerProposalsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSaveComments = async () => {
-    if (!viewProposal) return;
-    setSaving(true);
-    try {
-      const res = await api.patch<Proposal>(`/proposals/${viewProposal.id}/manager-review`, {
-        managerComments: managerComments.trim() || undefined,
-      });
-      setProposals((prev) => prev.map((p) => p.id === viewProposal.id ? res.data : p));
-      setViewProposal(res.data);
-      showFlash({ type: 'success', text: 'Comments saved successfully.' });
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showFlash({ type: 'error', text: typeof msg === 'string' ? msg : 'Failed to save comments.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const filtered = proposals.filter((p) => {
     const q = search.toLowerCase();
     return p.group.fypId.toLowerCase().includes(q) || p.projectTitle.toLowerCase().includes(q);
@@ -111,20 +90,12 @@ export default function ManagerProposalsPage() {
 
   return (
     <DashboardLayout navItems={navItems}>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Proposals</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {loading ? 'Loading…' : `${proposals.length} proposal${proposals.length !== 1 ? 's' : ''} submitted`}
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Proposals</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {loading ? 'Loading…' : `${proposals.length} proposal${proposals.length !== 1 ? 's' : ''} submitted`}
+        </p>
       </div>
-
-      {flash && (
-        <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${flash.type === 'success' ? 'border-green-100 bg-green-50 text-green-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
-          {flash.text}
-        </div>
-      )}
 
       <div className="mb-4 relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} />
@@ -180,7 +151,7 @@ export default function ManagerProposalsPage() {
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
-                        onClick={() => { setViewProposal(p); setManagerComments(p.managerComments ?? ''); }}
+                        onClick={() => setViewProposal(p)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                       >
                         View
@@ -194,9 +165,9 @@ export default function ManagerProposalsPage() {
         </table>
       </div>
 
-      {/* View Dialog */}
-      <Dialog open={!!viewProposal} onOpenChange={(open) => { if (!open) { setViewProposal(null); setManagerComments(''); } }}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" showCloseButton>
+      {/* View Dialog — read-only */}
+      <Dialog open={!!viewProposal} onOpenChange={(open) => { if (!open) setViewProposal(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Proposal Details</DialogTitle>
           </DialogHeader>
@@ -241,37 +212,20 @@ export default function ManagerProposalsPage() {
                   </div>
                 )}
 
-                {/* Manager Comments */}
-                <div>
-                  <label htmlFor="mgComments" className="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-                    Manager Comments
-                    <span className="ml-1 text-xs text-gray-400 normal-case font-normal">(optional)</span>
-                  </label>
-                  <textarea
-                    id="mgComments"
-                    rows={3}
-                    value={managerComments}
-                    onChange={(e) => setManagerComments(e.target.value)}
-                    placeholder="Add your comments…"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
-                  />
-                </div>
+                {viewProposal.managerComments && (
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Manager Comments</p>
+                    <p className="text-sm text-gray-700 rounded-lg bg-blue-50 px-4 py-3">{viewProposal.managerComments}</p>
+                  </div>
+                )}
 
-                <div className="flex items-center justify-end gap-2 pt-1">
+                <div className="flex justify-end pt-1">
                   <button
                     type="button"
-                    onClick={() => { setViewProposal(null); setManagerComments(''); }}
+                    onClick={() => setViewProposal(null)}
                     className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                   >
                     Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveComments}
-                    disabled={saving}
-                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {saving ? 'Saving…' : 'Save Comments'}
                   </button>
                 </div>
               </div>

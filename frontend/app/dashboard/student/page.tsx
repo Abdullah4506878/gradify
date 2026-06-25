@@ -9,6 +9,7 @@ import {
   User,
   FolderOpen,
   ClipboardCheck,
+  FileText,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -19,6 +20,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard/student', icon: LayoutDashboard },
   { label: 'My Group', href: '/dashboard/student/group', icon: Users },
   { label: 'Tasks', href: '/dashboard/student/tasks', icon: ClipboardList },
+  { label: 'Minutes of Meeting', href: '/dashboard/student/mom', icon: FileText },
   { label: 'Profile', href: '/dashboard/student/profile', icon: User },
 ];
 

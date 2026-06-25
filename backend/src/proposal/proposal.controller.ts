@@ -37,8 +37,8 @@ export class ProposalController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER, Role.SUPERVISOR)
-  findAll() {
-    return this.proposalService.findAll();
+  findAll(@Req() req: AuthRequest) {
+    return this.proposalService.findAll(req.user);
   }
 
   @Get('my')
