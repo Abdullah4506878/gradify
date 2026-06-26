@@ -51,7 +51,8 @@ interface Supervisor {
 
 interface Group {
   id: number;
-  fypId: string;
+  fypId: string | null;
+  supervisorAssigned: boolean;
   members: unknown[];
   preferences: { id: number; preference: number; supervisor: Supervisor }[];
   leader: { id: number; name: string | null; email: string };
@@ -91,9 +92,10 @@ export default function AssignSupervisorPage() {
     setErrors((prev) => { const n = { ...prev }; delete n[groupId]; return n; });
     setAssigning((prev) => ({ ...prev, [groupId]: true }));
     try {
-      await api.post(`/groups/${groupId}/assign`, {
+      const response = await api.post<Group>(`/groups/${groupId}/assign`, {
         supervisorId: parseInt(supervisorId, 10),
       });
+      setGroups((prev) => prev.map((g) => g.id === groupId ? response.data : g));
       setAssigned((prev) => ({ ...prev, [groupId]: true }));
     } catch (err: unknown) {
       const msg =
@@ -161,12 +163,16 @@ export default function AssignSupervisorPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {groups.map((group) => {
-                const isAssigned = assigned[group.id];
+                const assignedThisSession = assigned[group.id];
+                const alreadyAssigned = group.supervisorAssigned || assignedThisSession;
+                const assignedSupervisor = group.preferences.find((p) => p.preference === 1)?.supervisor;
                 return (
-                  <tr key={group.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={group.id} className={`transition-colors ${alreadyAssigned ? 'bg-green-50/40' : 'hover:bg-gray-50'}`}>
                     {/* FYP ID */}
                     <td className="px-6 py-4">
-                      <span className="font-mono text-sm font-medium text-gray-900">{group.fypId}</span>
+                      <span className="font-mono text-sm font-medium text-gray-900">
+                        {group.fypId ?? `Group #${group.id}`}
+                      </span>
                     </td>
 
                     {/* Leader */}
@@ -198,44 +204,52 @@ export default function AssignSupervisorPage() {
                       )}
                     </td>
 
-                    {/* Dropdown */}
+                    {/* Dropdown or assigned supervisor */}
                     <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <Select
-                          value={selections[group.id] ?? ''}
-                          onValueChange={(val) => {
-                            setSelections((prev) => ({ ...prev, [group.id]: val }));
-                            setErrors((prev) => { const n = { ...prev }; delete n[group.id]; return n; });
-                            setAssigned((prev) => { const n = { ...prev }; delete n[group.id]; return n; });
-                          }}
-                          disabled={supervisors.length === 0}
-                        >
-                          <SelectTrigger className="w-52 h-9 text-sm border-gray-200 bg-gray-50">
-                            <SelectValue placeholder={supervisors.length === 0 ? 'No supervisors' : 'Select supervisor'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {supervisors.map((s) => {
-                              const isFull = s.assignedGroupsCount >= s.maxGroups;
-                              return (
-                                <SelectItem key={s.id} value={String(s.id)} disabled={isFull}>
-                                  {s.name ?? s.email} ({s.assignedGroupsCount}/{s.maxGroups} assigned){isFull ? ' — Full' : ''}
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                        {errors[group.id] && (
-                          <p className="text-xs text-red-500">{errors[group.id]}</p>
-                        )}
-                      </div>
+                      {alreadyAssigned ? (
+                        <div className="text-sm text-gray-700">
+                          {assignedSupervisor
+                            ? (assignedSupervisor.name ?? assignedSupervisor.email)
+                            : <span className="italic text-gray-400">—</span>}
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <Select
+                            value={selections[group.id] ?? ''}
+                            onValueChange={(val) => {
+                              setSelections((prev) => ({ ...prev, [group.id]: val }));
+                              setErrors((prev) => { const n = { ...prev }; delete n[group.id]; return n; });
+                              setAssigned((prev) => { const n = { ...prev }; delete n[group.id]; return n; });
+                            }}
+                            disabled={supervisors.length === 0}
+                          >
+                            <SelectTrigger className="w-52 h-9 text-sm border-gray-200 bg-gray-50">
+                              <SelectValue placeholder={supervisors.length === 0 ? 'No supervisors' : 'Select supervisor'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {supervisors.map((s) => {
+                                const isFull = s.assignedGroupsCount >= s.maxGroups;
+                                return (
+                                  <SelectItem key={s.id} value={String(s.id)} disabled={isFull}>
+                                    {s.name ?? s.email} ({s.assignedGroupsCount}/{s.maxGroups} assigned){isFull ? ' — Full' : ''}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                          {errors[group.id] && (
+                            <p className="text-xs text-red-500">{errors[group.id]}</p>
+                          )}
+                        </div>
+                      )}
                     </td>
 
-                    {/* Save button */}
+                    {/* Save / Assigned badge */}
                     <td className="px-6 py-4 text-right">
-                      {isAssigned ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                      {alreadyAssigned ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
                           <Check className="h-3.5 w-3.5" strokeWidth={2} />
-                          Assigned!
+                          Assigned
                         </span>
                       ) : (
                         <button

@@ -123,8 +123,9 @@ export class GroupsService {
     });
 
     // Generate FYP ID if not yet assigned
-    if (!group.fypId) {
-      const fypId = await this.generateFypId(group.phaseId);
+    let fypId = group.fypId;
+    if (!fypId) {
+      fypId = await this.generateFypId(group.phaseId);
       await this.prisma.group.update({ where: { id: groupId }, data: { fypId } });
     }
 
@@ -138,7 +139,7 @@ export class GroupsService {
       this.notificationService.createMany(
         managerIds,
         'Supervisor Preferences Submitted',
-        `Group ${group.fypId} has submitted their supervisor preferences`,
+        `Group ${fypId ?? `#${group.id}`} has submitted their supervisor preferences`,
         'PREFERENCE',
         '/dashboard/manager/groups/assign',
       ).catch(() => {});
@@ -155,6 +156,7 @@ export class GroupsService {
     await this.prisma.supervisorPreference.create({
       data: { groupId, supervisorId, preference: 1 },
     });
+    await this.prisma.group.update({ where: { id: groupId }, data: { supervisorAssigned: true } });
 
     const supervisor = await this.prisma.user.findUnique({
       where: { id: supervisorId },
@@ -167,7 +169,7 @@ export class GroupsService {
     this.notificationService.createNotification(
       supervisorId,
       'Group Assigned',
-      `You have been assigned as supervisor for group ${group.fypId}`,
+      `You have been assigned as supervisor for group ${group.fypId ?? `#${group.id}`}`,
       'ASSIGNMENT',
       '/dashboard/supervisor/groups',
     ).catch(() => {});

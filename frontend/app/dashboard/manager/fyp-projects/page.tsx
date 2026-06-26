@@ -166,83 +166,69 @@ export default function FypProjectsPage() {
   };
 
   const exportPdf = () => {
-    window.print();
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const rows = projects
+      .map(
+        (p, idx) => {
+          const supervisor = p.preferences[0]?.supervisor;
+          const supervisorName = supervisor ? (supervisor.name ?? supervisor.email) : '—';
+          const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+          return `<tr style="background:${bg}">
+            <td style="padding:7px 10px;border:1px solid #e2e8f0">${idx + 1}</td>
+            <td style="padding:7px 10px;border:1px solid #e2e8f0;font-family:monospace;font-weight:600">${p.fypId}</td>
+            <td style="padding:7px 10px;border:1px solid #e2e8f0">${p.proposal.projectTitle}</td>
+            <td style="padding:7px 10px;border:1px solid #e2e8f0">${supervisorName}</td>
+          </tr>`;
+        },
+      )
+      .join('');
+    const date = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<title>FYP Projects</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
+  h1 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0; }
+  h2 { font-size: 13px; font-weight: 700; margin: 8px 0 0; }
+  .sub { font-size: 11px; color: #64748b; margin: 3px 0 0; }
+  .date { font-size: 10px; color: #94a3b8; margin: 4px 0 0; }
+  .header { text-align: center; border-bottom: 2px solid #1e293b; padding-bottom: 16px; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: #4F46E5; color: white; }
+  th { padding: 8px 10px; border: 1px solid #4338CA; text-align: left; }
+  .footer { margin-top: 16px; font-size: 11px; color: #64748b; text-align: right; }
+  @media print { @page { margin: 20mm; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>THE SUPERIOR UNIVERSITY LAHORE</h1>
+  <p class="sub">Department of Software Engineering</p>
+  <h2>FYP Project Directory</h2>
+  <p class="date">Generated on: ${date}</p>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:40px">Sr#</th>
+      <th style="width:140px">FYP ID</th>
+      <th>Project Title</th>
+      <th style="width:160px">Supervisor</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="footer">Total Projects: ${projects.length}</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`);
+    win.document.close();
   };
 
   return (
     <DashboardLayout navItems={navItems}>
-      {/* Print CSS */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #fyp-print-area, #fyp-print-area * { visibility: visible; }
-          #fyp-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 20px;
-          }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
-      {/* Hidden print area */}
-      <div id="fyp-print-area" style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-        {/* University header */}
-        <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
-          <img
-            src="/superior-logo.png"
-            alt="Superior University"
-            style={{ height: '60px', margin: '0 auto 8px', display: 'block' }}
-          />
-          <div style={{ fontWeight: '700', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#1e293b' }}>
-            THE SUPERIOR UNIVERSITY LAHORE
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
-            Department of Software Engineering
-          </div>
-          <div style={{ fontWeight: '700', fontSize: '13px', marginTop: '8px', color: '#1e293b' }}>
-            FYP Project Directory
-          </div>
-          <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-            Generated on: {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </div>
-        </div>
-
-        {/* Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', fontFamily: 'Arial, sans-serif' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#4F46E5', color: 'white' }}>
-              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '40px' }}>Sr#</th>
-              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '140px' }}>FYP ID</th>
-              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left' }}>Project Title</th>
-              <th style={{ padding: '8px 10px', border: '1px solid #4338CA', textAlign: 'left', width: '160px' }}>Supervisor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p, idx) => {
-              const supervisor = p.preferences[0]?.supervisor;
-              return (
-                <tr key={p.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>{idx + 1}</td>
-                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontWeight: '600' }}>{p.fypId}</td>
-                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>{p.proposal.projectTitle}</td>
-                  <td style={{ padding: '7px 10px', border: '1px solid #e2e8f0' }}>
-                    {supervisor ? (supervisor.name ?? supervisor.email) : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        {/* Footer */}
-        <div style={{ marginTop: '16px', fontSize: '11px', color: '#64748b', textAlign: 'right' }}>
-          Total Projects: {projects.length}
-        </div>
-      </div>
-
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between gap-4 print:hidden">
         <div>
@@ -266,7 +252,7 @@ export default function FypProjectsPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Printer className="h-4 w-4" strokeWidth={1.75} />
-            Print
+            Export PDF
           </button>
         </div>
       </div>

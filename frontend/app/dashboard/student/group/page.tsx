@@ -64,6 +64,7 @@ interface Group {
   id: number;
   fypId: string | null;
   status: GroupStatus;
+  supervisorAssigned: boolean;
   phase?: { phase: string; session?: { name: string } };
   leader: { id: number; name: string | null; email: string };
   members: Member[];
@@ -303,7 +304,7 @@ export default function StudentGroupPage() {
   const isLeader = group?.leader?.id === user?.id;
   const status = group ? (STATUS_STYLES[group.status] ?? STATUS_STYLES.FORMING) : null;
   const myEnrollment = group?.members.find((m) => m.user?.id === user?.id || m.userId === user?.id);
-  const supervisorAssigned = !!group?.preferences.find((p) => p.preference === 1);
+  const supervisorAssigned = group?.supervisorAssigned ?? false;
   const myRole = myEnrollment?.fypRole ?? null;
   const proposalApproved = proposal?.status === 'APPROVED';
 
@@ -447,83 +448,17 @@ export default function StudentGroupPage() {
             </CardContent>
           </Card>
 
-          {/* FYP Role card */}
-          <Card className="border-gray-200 shadow-none">
-            <CardContent className="pt-6">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">My FYP Role</h2>
-
-              {!supervisorAssigned ? (
-                /* CASE 1: No supervisor assigned yet */
-                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                  <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
-                  <p className="text-sm text-gray-500">
-                    Role selection will be available after your supervisor is assigned.
-                  </p>
-                </div>
-              ) : !myRole ? (
-                /* CASE 2: Supervisor assigned, role not yet selected */
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-indigo-600">
-                    Your supervisor has been assigned. Please select your FYP role.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { setPendingRole('DOCUMENTATION'); setRoleError(null); setRoleConfirmOpen(true); }}
-                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
-                    >
-                      📄 Documentation
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPendingRole('DEVELOPMENT'); setRoleError(null); setRoleConfirmOpen(true); }}
-                      className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-500 transition-colors"
-                    >
-                      💻 Development
-                    </button>
-                  </div>
-                  <p className="text-xs text-amber-600 font-medium">⚠️ This selection is permanent and cannot be changed</p>
-                  {roleError && (
-                    <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{roleError}</div>
-                  )}
-                </div>
-              ) : !proposalApproved ? (
-                /* CASE 3: Role selected, proposal not yet approved */
-                <div className="space-y-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
-                    {myRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
-                  </span>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <Lock className="h-3.5 w-3.5 text-gray-400 shrink-0" strokeWidth={1.75} />
-                    <p className="text-xs text-gray-500">Role locked until proposal is approved</p>
-                  </div>
-                </div>
-              ) : (
-                /* CASE 4: Role selected and proposal approved */
-                <div className="space-y-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
-                    {myRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
-                  </span>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" strokeWidth={2} />
-                    <p className="text-xs text-green-600 font-medium">Role confirmed</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Project Idea card */}
           <Card className="border-gray-200 shadow-none">
             <CardContent className="pt-6">
-              {!myRole ? (
-                /* Locked — role must be selected first */
+              {!supervisorAssigned ? (
+                /* Locked — supervisor must be assigned first */
                 <>
                   <h2 className="text-sm font-semibold text-gray-900 mb-4">Project Idea</h2>
                   <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
                     <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
                     <p className="text-sm text-gray-500">
-                      Submit your FYP role first to unlock project idea submission.
+                      Your supervisor must be assigned before you can submit a project idea.
                     </p>
                   </div>
                 </>
@@ -591,6 +526,61 @@ export default function StudentGroupPage() {
                     </div>
                   )}
                 </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* FYP Role card */}
+          <Card className="border-gray-200 shadow-none">
+            <CardContent className="pt-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4">My FYP Role</h2>
+
+              {!proposalApproved ? (
+                /* CASE 1: Proposal not submitted, pending, or rejected */
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                  <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
+                  <p className="text-sm text-gray-500">
+                    Submit and get your project idea approved first.
+                  </p>
+                </div>
+              ) : !myRole ? (
+                /* CASE 2: Proposal approved, role not yet selected */
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-indigo-600">
+                    Your proposal is approved. Please select your FYP role.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setPendingRole('DOCUMENTATION'); setRoleError(null); setRoleConfirmOpen(true); }}
+                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
+                    >
+                      📄 Documentation
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPendingRole('DEVELOPMENT'); setRoleError(null); setRoleConfirmOpen(true); }}
+                      className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-500 transition-colors"
+                    >
+                      💻 Development
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-600 font-medium">⚠️ This selection is permanent and cannot be changed</p>
+                  {roleError && (
+                    <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{roleError}</div>
+                  )}
+                </div>
+              ) : (
+                /* CASE 3: Role selected */
+                <div className="space-y-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${myRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {myRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
+                  </span>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" strokeWidth={2} />
+                    <p className="text-xs text-green-600 font-medium">Role confirmed</p>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -156,12 +156,13 @@ model FYPPhase {
 }
 
 model Group {
-  id             Int                    @id @default(autoincrement())
-  fypId          String?                @unique
-  universityId   Int
-  phaseId        Int
-  leaderId       Int
-  status         GroupStatus            @default(FORMING)
+  id                 Int                    @id @default(autoincrement())
+  fypId              String?                @unique
+  universityId       Int
+  phaseId            Int
+  leaderId           Int
+  status             GroupStatus            @default(FORMING)
+  supervisorAssigned Boolean                @default(false)
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   phase          FYPPhase               @relation(fields: [phaseId], references: [id])
