@@ -89,7 +89,7 @@ export default function StudentDashboard() {
       try {
         const [groupsRes, tasksRes, meRes] = await Promise.allSettled([
           api.get<Group[]>('/groups'),
-          api.get<Task[]>('/tasks'),
+          api.get<Task[]>('/tasks/student/my-tasks'),
           api.get<{ name: string | null }>('/users/me'),
         ]);
 

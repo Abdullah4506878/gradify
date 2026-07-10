@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -196,7 +196,7 @@ export default function CreateMOMPage() {
       </div>
 
       <div className="max-w-2xl">
-        <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
           {/* University header */}
           <div className="border-b border-gray-100 bg-gray-50 px-6 py-5 text-center">
             <div className="flex justify-center mb-3">

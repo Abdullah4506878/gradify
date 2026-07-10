@@ -24,22 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 interface Supervisor {
   id: number;
@@ -110,7 +96,7 @@ export default function AssignSupervisorPage() {
   };
 
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Back link + header */}
       <div className="mb-6">
         <Link
@@ -137,7 +123,7 @@ export default function AssignSupervisorPage() {
           <p className="mt-1 text-xs text-gray-400">Groups will appear here once students form them.</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100">
             <thead>
               <tr className="bg-gray-50">
@@ -269,6 +255,6 @@ export default function AssignSupervisorPage() {
           </table>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

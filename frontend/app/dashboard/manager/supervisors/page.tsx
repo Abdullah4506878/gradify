@@ -35,23 +35,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
 import { exportToExcel, exportToPDF } from '@/lib/export';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 interface Supervisor {
   id: number;
@@ -169,7 +155,7 @@ export default function SupervisorsPage() {
   });
 
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
@@ -263,7 +249,7 @@ export default function SupervisorsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">
@@ -419,6 +405,6 @@ export default function SupervisorsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

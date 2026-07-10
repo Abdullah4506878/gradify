@@ -9,7 +9,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Phase, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -23,7 +23,7 @@ export class AcademicSessionController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.MANAGER)
+  @Roles(Role.SUPER_ADMIN)
   create(@Body() dto: CreateAcademicSessionDto) {
     return this.academicSessionService.create(dto);
   }
@@ -40,15 +40,39 @@ export class AcademicSessionController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.MANAGER)
+  @Roles(Role.SUPER_ADMIN)
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateAcademicSessionDto>) {
     return this.academicSessionService.update(id, dto);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.MANAGER)
+  @Roles(Role.SUPER_ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.academicSessionService.remove(id);
+  }
+
+  @Patch(':id/toggle-active')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  toggleActive(@Param('id', ParseIntPipe) id: number) {
+    return this.academicSessionService.toggleActive(id);
+  }
+
+  @Post(':id/phases')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  addPhase(@Param('id', ParseIntPipe) id: number, @Body() body: { phase: Phase }) {
+    return this.academicSessionService.addPhase(id, body.phase);
+  }
+
+  @Delete(':id/phases/:phaseId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  removePhase(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+  ) {
+    return this.academicSessionService.removePhase(id, phaseId);
   }
 }

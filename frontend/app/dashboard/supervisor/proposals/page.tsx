@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
@@ -138,7 +138,7 @@ export default function SupervisorProposalsPage() {
         />
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">

@@ -5,23 +5,26 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FypRole, GroupStatus, Phase, ProposalStatus, Role, Semester } from '@prisma/client';
+import { EnrollmentStatus, FypRole, GroupStatus, InviteStatus, Phase, ProposalStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { AdminService } from '../admin/admin.service';
+import { AcademicSessionService } from '../academic-session/academic-session.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { SupervisorPreferenceDto } from './dto/supervisor-preference.dto';
-
-const SEMESTER_CODE: Record<Semester, string> = {
-  FALL: 'F',
-  SPRING: 'S',
-  SUMMER: 'SU',
-};
 
 const GROUP_INCLUDE = {
   leader: { select: { id: true, name: true, email: true, role: true } },
   members: { include: { user: { select: { id: true, name: true, email: true, role: true } } } },
   preferences: { include: { supervisor: { select: { id: true, name: true, email: true } } }, orderBy: { preference: 'asc' as const } },
   phase: { include: { session: { include: { program: true } } } },
+  invites: {
+    include: {
+      invited: { select: { id: true, name: true, email: true } },
+      inviter: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
 } as const;
 
 @Injectable()
@@ -29,22 +32,20 @@ export class GroupsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly adminService: AdminService,
+    private readonly academicSessionService: AcademicSessionService,
   ) {}
 
   async create(leaderId: number, dto: CreateGroupDto, universityId: number) {
-    const phase = await this.prisma.fYPPhase.findUnique({ where: { id: dto.phaseId } });
-    if (!phase || phase.phase !== Phase.FYP_1) {
-      throw new BadRequestException('Students can only create groups for FYP-1');
+    const session = await this.academicSessionService.getActiveSession();
+    const fyp1Phase = session.phases.find((p) => p.phase === Phase.FYP_1);
+    if (!fyp1Phase) {
+      throw new BadRequestException('Active session has no FYP-1 phase configured.');
     }
-
-    const existing = await this.prisma.enrollment.findFirst({
-      where: { userId: leaderId, group: { phaseId: dto.phaseId } },
-    });
-    if (existing) throw new ConflictException('You are already in a group for this phase');
 
     const group = await this.prisma.group.create({
       data: {
-        phaseId: dto.phaseId,
+        phaseId: fyp1Phase.id,
         universityId,
         leaderId,
         members: { create: { userId: leaderId } },
@@ -72,8 +73,12 @@ export class GroupsService {
     return group;
   }
 
-  async joinGroup(groupId: number, userId: number) {
+  async inviteMember(groupId: number, leaderId: number, invitedId: number) {
     const group = await this.findOne(groupId);
+
+    if (group.leaderId !== leaderId) {
+      throw new ForbiddenException('Only the group leader can invite members');
+    }
 
     if (group.status !== GroupStatus.FORMING) {
       throw new BadRequestException('Group is no longer accepting members');
@@ -83,14 +88,149 @@ export class GroupsService {
       throw new BadRequestException('Group has reached the maximum of 3 members');
     }
 
-    const alreadyMember = await this.prisma.enrollment.findUnique({
-      where: { userId_groupId: { userId, groupId } },
-    });
-    if (alreadyMember) throw new ConflictException('You are already a member of this group');
+    const alreadyMember = group.members.some((m) => m.user.id === invitedId);
+    if (alreadyMember) throw new ConflictException('This student is already a member of the group');
 
-    return this.prisma.enrollment.create({
-      data: { userId, groupId },
-      include: { user: { select: { id: true, name: true, email: true } }, group: true },
+    const existingInvite = await this.prisma.groupInvite.findFirst({
+      where: { groupId, invitedId, status: InviteStatus.PENDING },
+    });
+    if (existingInvite) throw new ConflictException('An invitation is already pending for this student');
+
+    const activeEnrollment = await this.prisma.enrollment.findFirst({
+      where: { userId: invitedId, status: EnrollmentStatus.ACTIVE },
+    });
+    if (activeEnrollment) throw new BadRequestException('This student is already part of another group');
+
+    const invite = await this.prisma.groupInvite.create({
+      data: { groupId, invitedId, invitedBy: leaderId, status: InviteStatus.PENDING },
+    });
+
+    this.notificationService.createNotification(
+      invitedId,
+      'Group Invitation',
+      `You have been invited to join group ${group.fypId ?? `#${group.id}`}`,
+      'INVITE',
+      '/dashboard/student/group',
+    ).catch(() => {});
+
+    const managers = await this.prisma.user.findMany({
+      where: { role: Role.MANAGER, universityId: group.universityId },
+      select: { id: true },
+    });
+    if (managers.length > 0) {
+      this.notificationService.createMany(
+        managers.map((m) => m.id),
+        'Group Invitation Sent',
+        `An invitation was sent to join group ${group.fypId ?? `#${group.id}`}`,
+        'INVITE',
+        '/dashboard/manager/groups',
+      ).catch(() => {});
+    }
+
+    return invite;
+  }
+
+  async acceptInvite(inviteId: number, userId: number) {
+    const invite = await this.prisma.groupInvite.findUnique({
+      where: { id: inviteId },
+      include: {
+        group: {
+          select: {
+            id: true,
+            fypId: true,
+            leaderId: true,
+            status: true,
+            universityId: true,
+            members: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!invite) throw new NotFoundException('Invite not found');
+    if (invite.invitedId !== userId) throw new ForbiddenException('This invite is not for you');
+    if (invite.status !== InviteStatus.PENDING) throw new BadRequestException('Invite is no longer pending');
+
+    const { group } = invite;
+
+    if (group.status !== GroupStatus.FORMING) {
+      throw new BadRequestException('Group is no longer accepting members');
+    }
+
+    if (group.members.length >= 3) {
+      throw new BadRequestException('Group has reached the maximum of 3 members');
+    }
+
+    const activeEnrollment = await this.prisma.enrollment.findFirst({
+      where: { userId, status: EnrollmentStatus.ACTIVE },
+      include: { group: { select: { fypId: true, id: true } } },
+    });
+    if (activeEnrollment) {
+      const fypId = activeEnrollment.group?.fypId ?? `#${activeEnrollment.groupId}`;
+      throw new BadRequestException(`You are already part of a group. Your FYP ID: ${fypId}`);
+    }
+
+    await this.prisma.enrollment.create({ data: { userId, groupId: invite.groupId } });
+    await this.prisma.groupInvite.update({ where: { id: inviteId }, data: { status: InviteStatus.ACCEPTED } });
+
+    this.notificationService.createNotification(
+      group.leaderId,
+      'Invitation Accepted',
+      `A student accepted your invitation to join group ${group.fypId ?? `#${group.id}`}`,
+      'INVITE',
+      '/dashboard/student/group',
+    ).catch(() => {});
+
+    const managers = await this.prisma.user.findMany({
+      where: { role: Role.MANAGER, universityId: group.universityId },
+      select: { id: true },
+    });
+    if (managers.length > 0) {
+      this.notificationService.createMany(
+        managers.map((m) => m.id),
+        'Group Invitation Accepted',
+        `A student joined group ${group.fypId ?? `#${group.id}`}`,
+        'INVITE',
+        '/dashboard/manager/groups',
+      ).catch(() => {});
+    }
+
+    return this.findOne(invite.groupId);
+  }
+
+  async rejectInvite(inviteId: number, userId: number) {
+    const invite = await this.prisma.groupInvite.findUnique({
+      where: { id: inviteId },
+      include: { group: { select: { id: true, fypId: true, leaderId: true } } },
+    });
+    if (!invite) throw new NotFoundException('Invite not found');
+    if (invite.invitedId !== userId) throw new ForbiddenException('This invite is not for you');
+    if (invite.status !== InviteStatus.PENDING) throw new BadRequestException('Invite is no longer pending');
+
+    await this.prisma.groupInvite.update({ where: { id: inviteId }, data: { status: InviteStatus.REJECTED } });
+
+    this.notificationService.createNotification(
+      invite.group.leaderId,
+      'Invitation Rejected',
+      `A student declined your invitation to join group ${invite.group.fypId ?? `#${invite.group.id}`}`,
+      'INVITE',
+      '/dashboard/student/group',
+    ).catch(() => {});
+
+    return { message: 'Invitation rejected' };
+  }
+
+  async getPendingInvites(userId: number) {
+    return this.prisma.groupInvite.findMany({
+      where: { invitedId: userId, status: InviteStatus.PENDING },
+      include: {
+        group: {
+          include: {
+            leader: { select: { id: true, name: true, email: true } },
+            phase: { include: { session: { include: { program: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -108,6 +248,17 @@ export class GroupsService {
     const memberCount = await this.prisma.enrollment.count({ where: { groupId } });
     if (memberCount < 2) {
       throw new BadRequestException('Group must have at least 2 members before submitting preferences');
+    }
+
+    const requireSocial = await this.prisma.systemSetting.findUnique({ where: { key: 'require_github_linkedin' } });
+    if (requireSocial?.value === 'true') {
+      const leader = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { githubUrl: true, linkedinUrl: true },
+      });
+      if (!leader?.githubUrl || !leader?.linkedinUrl) {
+        throw new BadRequestException('Complete your profile first. Add GitHub & LinkedIn in Profile page.');
+      }
     }
 
     const preferenceNums = dto.preferences.map((p) => p.preference);
@@ -240,6 +391,69 @@ export class GroupsService {
     });
   }
 
+  async managerEditGroup(
+    groupId: number,
+    data: {
+      addMemberEmail?: string;
+      removeMemberId?: number;
+      newLeaderId?: number;
+      newSupervisorId?: number;
+    },
+  ) {
+    const group = await this.findOne(groupId);
+
+    if (data.addMemberEmail !== undefined) {
+      const user = await this.prisma.user.findUnique({
+        where: { email: data.addMemberEmail },
+        select: { id: true },
+      });
+      if (!user) throw new NotFoundException(`No user found with email "${data.addMemberEmail}"`);
+
+      const existingEnrollment = await this.prisma.enrollment.findFirst({ where: { userId: user.id } });
+      if (existingEnrollment) throw new ConflictException('This user is already enrolled in a group');
+
+      if (group.members.length >= 3) throw new BadRequestException('Group already has the maximum of 3 members');
+
+      await this.prisma.enrollment.create({ data: { userId: user.id, groupId } });
+    }
+
+    if (data.removeMemberId !== undefined) {
+      if (group.leaderId === data.removeMemberId) {
+        throw new BadRequestException('Cannot remove the group leader. Change the leader first.');
+      }
+      const enrollment = await this.prisma.enrollment.findFirst({
+        where: { userId: data.removeMemberId, groupId },
+      });
+      if (!enrollment) throw new NotFoundException('Member not found in this group');
+      await this.prisma.enrollment.delete({ where: { id: enrollment.id } });
+    }
+
+    if (data.newLeaderId !== undefined) {
+      const isMember = group.members.some((m) => m.user?.id === data.newLeaderId);
+      if (!isMember) throw new BadRequestException('New leader must be an existing group member');
+      await this.prisma.group.update({ where: { id: groupId }, data: { leaderId: data.newLeaderId } });
+    }
+
+    if (data.newSupervisorId !== undefined) {
+      await this.prisma.supervisorPreference.deleteMany({ where: { groupId } });
+      await this.prisma.supervisorPreference.create({
+        data: { groupId, supervisorId: data.newSupervisorId, preference: 1 },
+      });
+      await this.prisma.group.update({ where: { id: groupId }, data: { supervisorAssigned: true } });
+    }
+
+    return this.findOne(groupId);
+  }
+
+  async managerDeleteGroup(groupId: number) {
+    await this.findOne(groupId);
+    await this.prisma.groupInvite.deleteMany({ where: { groupId } });
+    await this.prisma.supervisorPreference.deleteMany({ where: { groupId } });
+    await this.prisma.enrollment.deleteMany({ where: { groupId } });
+    await this.prisma.group.delete({ where: { id: groupId } });
+    return { message: 'Group deleted successfully' };
+  }
+
   private async generateFypId(phaseId: number): Promise<string> {
     const phase = await this.prisma.fYPPhase.findUnique({
       where: { id: phaseId },
@@ -248,12 +462,13 @@ export class GroupsService {
     if (!phase) throw new NotFoundException('FYP phase not found');
 
     const programCode = phase.session.program.code.toUpperCase();
-    const semCode = SEMESTER_CODE[phase.session.semester];
-    const year = String(phase.session.year).slice(-2);
+    const { semester, year } = await this.adminService.getCurrentSemester();
+    const semCode = semester === 'FALL' ? 'F' : 'S';
+    const yearCode = String(year).slice(-2);
 
     const count = await this.prisma.group.count({ where: { phaseId, fypId: { not: null } } });
     const sequence = String(count + 1).padStart(3, '0');
 
-    return `${programCode}-FYP-${semCode}${year}-${sequence}`;
+    return `${programCode}-FYP-${semCode}${yearCode}-${sequence}`;
   }
 }

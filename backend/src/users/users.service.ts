@@ -3,12 +3,11 @@ import { Role, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import { isEmail } from 'class-validator';
-import { randomBytes } from 'crypto';
 import { parse } from 'csv-parse/sync';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { FileUserRow, ImportUsersResult } from './dto/import-users.dto';
-import { UpdateMeDto, UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeDto, UpdateProfileDto, UpdateUserDto } from './dto/update-user.dto';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -17,13 +16,33 @@ const safeUserSelect = {
   email: true,
   name: true,
   rollNumber: true,
+  section: true,
   role: true,
   maxGroups: true,
   universityId: true,
   university: true,
+  githubUrl: true,
+  linkedinUrl: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+const COL_ALIASES: Record<string, string[]> = {
+  name: ['name', 'student name', 'full name'],
+  email: ['email', 'mail', 'email address'],
+  rollNumber: ['roll', 'reg', 'registration', 'roll no', 'roll number'],
+  section: ['section', 'class', 'batch'],
+};
+
+function detectCols(headers: string[]): Record<string, string | undefined> {
+  const result: Record<string, string | undefined> = {};
+  for (const [field, aliases] of Object.entries(COL_ALIASES)) {
+    result[field] = headers.find((h) =>
+      aliases.some((alias) => h.toLowerCase().includes(alias)),
+    );
+  }
+  return result;
+}
 
 @Injectable()
 export class UsersService {
@@ -122,6 +141,26 @@ export class UsersService {
     return safe;
   }
 
+  async updateProfile(id: number, dto: UpdateProfileDto) {
+    await this.ensureExists(id);
+    if (dto.githubUrl && !dto.githubUrl.startsWith('https://github.com/')) {
+      throw new BadRequestException('GitHub URL must start with https://github.com/');
+    }
+    if (dto.linkedinUrl && !dto.linkedinUrl.startsWith('https://linkedin.com/in/')) {
+      throw new BadRequestException('LinkedIn URL must start with https://linkedin.com/in/');
+    }
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.githubUrl !== undefined) data.githubUrl = dto.githubUrl;
+    if (dto.linkedinUrl !== undefined) data.linkedinUrl = dto.linkedinUrl;
+    const { password: _, refreshToken: __, ...safe } = await this.prisma.user.update({
+      where: { id },
+      data,
+      include: { university: true },
+    });
+    return safe;
+  }
+
   async updateMe(id: number, dto: UpdateMeDto) {
     await this.ensureExists(id);
     const data: { name?: string; password?: string } = {};
@@ -144,72 +183,93 @@ export class UsersService {
       mimetype.includes('spreadsheetml') ||
       originalname.toLowerCase().endsWith('.xlsx');
 
-    let records: FileUserRow[];
+    let rawRecords: FileUserRow[];
     try {
       if (isXlsx) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        records = XLSX.utils.sheet_to_json<FileUserRow>(worksheet);
+        rawRecords = XLSX.utils.sheet_to_json<FileUserRow>(worksheet);
       } else {
-        records = parse(buffer, { columns: true, skip_empty_lines: true, trim: true });
+        rawRecords = parse(buffer, { columns: true, skip_empty_lines: true, trim: true });
       }
     } catch {
       throw new BadRequestException('Failed to parse file — check the format and try again');
     }
 
-    const validRoles = new Set(Object.values(Role));
-    let imported = 0;
+    if (rawRecords.length === 0) return { added: 0, updated: 0, imported: 0, skipped: 0, errors: [] };
+
+    const headers = Object.keys(rawRecords[0]);
+    const cols = detectCols(headers);
+
+    let added = 0;
+    let updated = 0;
     let skipped = 0;
     const errors: string[] = [];
 
-    for (let i = 0; i < records.length; i++) {
-      const row = records[i];
+    for (let i = 0; i < rawRecords.length; i++) {
+      const raw = rawRecords[i];
       const rowNum = i + 1;
 
-      if (!row.email || !isEmail(String(row.email))) {
-        errors.push(`Row ${rowNum}: invalid email "${row.email ?? ''}"`);
+      const nameVal = cols.name && raw[cols.name] ? String(raw[cols.name]).trim() || null : null;
+      const emailVal = cols.email && raw[cols.email] ? String(raw[cols.email]).trim() : '';
+      const rollVal = cols.rollNumber && raw[cols.rollNumber] ? String(raw[cols.rollNumber]).trim() || null : null;
+      const sectionVal = cols.section && raw[cols.section] ? String(raw[cols.section]).trim() || null : null;
+
+      if (!emailVal && !rollVal) {
+        errors.push(`Row ${rowNum}: no email or roll number found`);
         skipped++;
         continue;
       }
 
-      if (row.role && !validRoles.has(row.role as Role)) {
-        errors.push(`Row ${rowNum}: invalid role "${row.role}" for ${row.email}`);
-        skipped++;
-        continue;
+      // Key lookup: rollNumber first, email second
+      let existing: { id: number } | null = null;
+      if (rollVal) {
+        existing = await this.prisma.user.findUnique({ where: { rollNumber: rollVal }, select: { id: true } });
+      }
+      if (!existing && emailVal) {
+        existing = await this.prisma.user.findUnique({ where: { email: emailVal }, select: { id: true } });
       }
 
-      const existing = await this.findByEmail(String(row.email));
       if (existing) {
-        errors.push(`Row ${rowNum}: duplicate email "${row.email}"`);
-        skipped++;
-        continue;
-      }
-
-      const plainPassword = randomBytes(4).toString('hex');
-      console.log(`[File Import] ${row.email} → password: ${plainPassword}`);
-
-      try {
-        const hashed = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
-        await this.prisma.user.create({
+        // Update name + section only
+        await this.prisma.user.update({
+          where: { id: existing.id },
           data: {
-            name: row.name ? String(row.name) : null,
-            email: String(row.email),
-            password: hashed,
-            role: (row.role as Role) || Role.STUDENT,
-            rollNumber: row.rollNumber ? String(row.rollNumber) : null,
-            universityId: row.universityId ? parseInt(String(row.universityId), 10) : null,
+            ...(nameVal !== null && { name: nameVal }),
+            ...(sectionVal !== null && { section: sectionVal }),
           },
         });
-        imported++;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'unknown error';
-        errors.push(`Row ${rowNum}: failed to create "${row.email}" — ${message}`);
-        skipped++;
+        updated++;
+      } else {
+        // Create new student
+        if (!emailVal || !isEmail(emailVal)) {
+          errors.push(`Row ${rowNum}: invalid or missing email "${emailVal}" — cannot create user`);
+          skipped++;
+          continue;
+        }
+        try {
+          const hashed = await bcrypt.hash('Test@123', BCRYPT_ROUNDS);
+          await this.prisma.user.create({
+            data: {
+              email: emailVal,
+              name: nameVal,
+              rollNumber: rollVal,
+              section: sectionVal,
+              password: hashed,
+              role: Role.STUDENT,
+            },
+          });
+          added++;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'unknown error';
+          errors.push(`Row ${rowNum}: failed to create "${emailVal}" — ${message}`);
+          skipped++;
+        }
       }
     }
 
-    return { imported, skipped, errors };
+    return { added, updated, imported: added + updated, skipped, errors };
   }
 
   async removeUser(id: number) {

@@ -64,12 +64,28 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.taskReview;
   }
 
+  get taskMemberStatus() {
+    return this.client.taskMemberStatus;
+  }
+
   get proposal() {
     return this.client.proposal;
   }
 
   get notification() {
     return this.client.notification;
+  }
+
+  get activityLog() {
+    return this.client.activityLog;
+  }
+
+  get groupInvite() {
+    return this.client.groupInvite;
+  }
+
+  get systemSetting() {
+    return this.client.systemSetting;
   }
 
   async onModuleInit(): Promise<void> {

@@ -4,23 +4,18 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
-import { ReviewTaskDto } from './dto/review-task.dto';
-import { SubmitTaskDto } from './dto/submit-task.dto';
+import { ApproveMembersDto } from './dto/approve-members.dto';
 import { TasksService } from './tasks.service';
 
 interface AuthRequest extends Request {
@@ -36,57 +31,52 @@ export class TasksController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPERVISOR)
   create(@Req() req: AuthRequest, @Body() dto: CreateTaskDto) {
-    return this.tasksService.create(req.user.id, dto);
+    return this.tasksService.createTask(req.user.id, dto);
   }
 
-  @Get()
-  findAll(@Req() req: AuthRequest) {
-    return this.tasksService.findAll(req.user);
+  @Patch(':id/approve-members')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPERVISOR)
+  approveMembers(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthRequest,
+    @Body() dto: ApproveMembersDto,
+  ) {
+    return this.tasksService.approveMembers(req.user.id, id, dto);
+  }
+
+  @Get('supervisor/my-tasks')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPERVISOR)
+  getSupervisorTasks(@Req() req: AuthRequest) {
+    return this.tasksService.getTasksForSupervisor(req.user.id);
+  }
+
+  @Get('student/my-tasks')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  getStudentTasks(@Req() req: AuthRequest) {
+    return this.tasksService.getTasksForStudent(req.user.id);
   }
 
   @Get('manager/all')
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER)
-  findAllManager() {
-    return this.tasksService.findAll({ id: 0, role: Role.MANAGER });
+  getManagerTasks() {
+    return this.tasksService.getTasksForManager();
   }
 
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.tasksService.findOne(id);
-  }
-
-  @Post(':id/submit')
+  @Get('group/:groupId/scores')
   @UseGuards(RolesGuard)
-  @Roles(Role.STUDENT)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => {
-          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
-    }),
-  )
-  submitTask(
-    @Param('id', ParseIntPipe) id: number,
-    @Req() req: AuthRequest,
-    @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() dto: SubmitTaskDto,
-  ) {
-    return this.tasksService.submitTask(id, req.user.id, dto, file);
+  @Roles(Role.MANAGER, Role.SUPERVISOR)
+  getGroupScores(@Param('groupId', ParseIntPipe) groupId: number) {
+    return this.tasksService.getGroupScores(groupId);
   }
 
-  @Post(':id/review')
+  @Get('supervisor/schedule')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPERVISOR)
-  reviewTask(
-    @Param('id', ParseIntPipe) id: number,
-    @Req() req: AuthRequest,
-    @Body() dto: ReviewTaskDto,
-  ) {
-    return this.tasksService.reviewTask(id, req.user.id, dto);
+  getSupervisorSchedule(@Req() req: AuthRequest) {
+    return this.tasksService.getSupervisorSchedule(req.user.id);
   }
 }

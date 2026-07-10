@@ -1,10 +1,10 @@
 import { Semester } from '@prisma/client';
-import { IsEnum, IsInt, IsNotEmpty, IsPositive, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator';
 
 export class CreateAcademicSessionDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  name?: string;
 
   @IsEnum(Semester)
   semester: Semester;

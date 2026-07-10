@@ -20,6 +20,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (user.role !== dto.role) {
+      throw new UnauthorizedException('Invalid credentials for selected role');
+    }
+
     const tokens = await this.issueTokens(user.id, user.email, user.role);
     await this.usersService.updateRefreshToken(
       user.id,
@@ -61,11 +65,11 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_SECRET ?? 'secret',
-        expiresIn: '7d' as any,
+        expiresIn: '15m' as any,
       }),
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_REFRESH_SECRET ?? 'refresh-secret',
-        expiresIn: '3d' as any,
+        expiresIn: '7d' as any,
       }),
     ]);
     return { accessToken, refreshToken };

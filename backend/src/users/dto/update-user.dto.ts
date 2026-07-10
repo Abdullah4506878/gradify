@@ -35,3 +35,17 @@ export class UpdateMeDto {
   @IsOptional()
   password?: string;
 }
+
+export class UpdateProfileDto {
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  githubUrl?: string | null;
+
+  @IsString()
+  @IsOptional()
+  linkedinUrl?: string | null;
+}

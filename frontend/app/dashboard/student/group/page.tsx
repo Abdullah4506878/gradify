@@ -17,6 +17,7 @@ import {
   XCircle,
   FileText,
   Lock,
+  Mail,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -35,6 +36,11 @@ import {
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuthStore } from '@/lib/auth';
 import api from '@/lib/api';
+
+interface PublicSettings {
+  show_supervisor_to_student?: string;
+  show_phase_to_students?: string;
+}
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard/student', icon: LayoutDashboard },
@@ -91,6 +97,18 @@ interface Supervisor {
   email: string;
 }
 
+interface GroupInvite {
+  id: number;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  createdAt: string;
+  group: {
+    id: number;
+    fypId: string | null;
+    leader: { id: number; name: string | null; email: string };
+    phase?: { phase: string; session?: { name: string } };
+  };
+}
+
 const STATUS_STYLES: Record<GroupStatus, { label: string; className: string }> = {
   FORMING: { label: 'Forming', className: 'bg-yellow-50 text-yellow-700' },
   ACTIVE: { label: 'Active', className: 'bg-green-50 text-green-700' },
@@ -113,12 +131,17 @@ export default function StudentGroupPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Add member
+  // Invite member
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [addMemberSuccess, setAddMemberSuccess] = useState<string | null>(null);
+
+  // Pending invites
+  const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
+  const [invitesLoading, setInvitesLoading] = useState(true);
+  const [inviteActionLoading, setInviteActionLoading] = useState<number | null>(null);
 
   // Proposal
   const [proposal, setProposal] = useState<Proposal | null | undefined>(undefined);
@@ -133,6 +156,9 @@ export default function StudentGroupPage() {
   const [p3, setP3] = useState('');
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+
+  // Public settings
+  const [publicSettings, setPublicSettings] = useState<PublicSettings>({});
 
   // FYP Role selection
   const [roleConfirmOpen, setRoleConfirmOpen] = useState(false);
@@ -171,9 +197,28 @@ export default function StudentGroupPage() {
     }
   }, [user?.id]);
 
+  const loadInvites = useCallback(async () => {
+    try {
+      const res = await api.get<GroupInvite[]>('/groups/invites/pending');
+      setPendingInvites(res.data);
+    } catch {
+      setPendingInvites([]);
+    } finally {
+      setInvitesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadGroup();
   }, [loadGroup]);
+
+  useEffect(() => {
+    api.get<PublicSettings>('/settings/public').then((r) => setPublicSettings(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadInvites();
+  }, [loadInvites]);
 
   useEffect(() => {
     setPhasesLoading(true);
@@ -231,24 +276,32 @@ export default function StudentGroupPage() {
     setAddMemberLoading(true);
     try {
       const usersRes = await api.get<{ id: number; email: string }[]>('/users');
-      console.log('All users:', usersRes.data.length);
       const found = usersRes.data.find((u) => u.email === email);
-      console.log('Found user:', found);
       if (!found) {
         setAddMemberError('No student found with this email address.');
         return;
       }
-      console.log('Posting join with userId:', found.id, 'groupId:', group!.id);
       await api.post(`/groups/${group!.id}/join`, { userId: found.id });
-      setAddMemberOpen(false);
+      setAddMemberSuccess(`Invitation sent to ${email}`);
       setMemberEmail('');
-      setLoading(true);
-      await loadGroup();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setAddMemberError(typeof msg === 'string' ? msg : 'Failed to add member. Please try again.');
+      setAddMemberError(typeof msg === 'string' ? msg : 'Failed to send invitation. Please try again.');
     } finally {
       setAddMemberLoading(false);
+    }
+  };
+
+  const handleInviteAction = async (inviteId: number, action: 'accept' | 'reject') => {
+    setInviteActionLoading(inviteId);
+    try {
+      await api.post(`/groups/invites/${inviteId}/${action}`);
+      await Promise.all([loadInvites(), loadGroup()]);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      alert(typeof msg === 'string' ? msg : `Failed to ${action} invite`);
+    } finally {
+      setInviteActionLoading(null);
     }
   };
 
@@ -315,6 +368,52 @@ export default function StudentGroupPage() {
         <p className="mt-1 text-sm text-gray-500">Your FYP group details and members</p>
       </div>
 
+      {/* ── Pending Invites Section ── */}
+      {!invitesLoading && pendingInvites.length > 0 && (
+        <div className="max-w-2xl mb-6 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <Mail className="h-4 w-4 text-indigo-500" strokeWidth={1.75} />
+            Group Invitations ({pendingInvites.length})
+          </h2>
+          {pendingInvites.map((invite) => (
+            <div
+              key={invite.id}
+              className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3.5 flex items-start justify-between gap-4"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">
+                  {invite.group.fypId ?? `Group #${invite.group.id}`}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Leader: {invite.group.leader.name ?? invite.group.leader.email}
+                  {invite.group.phase && publicSettings.show_phase_to_students !== 'false' && (
+                    <> · {invite.group.phase.session?.name} — {invite.group.phase.phase.replace('_', ' ')}</>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleInviteAction(invite.id, 'reject')}
+                  disabled={inviteActionLoading === invite.id}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {inviteActionLoading === invite.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Decline'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInviteAction(invite.id, 'accept')}
+                  disabled={inviteActionLoading === invite.id}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                >
+                  {inviteActionLoading === invite.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Accept'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="max-w-2xl space-y-5">
           <Card className="border-gray-200 shadow-none">
@@ -348,7 +447,7 @@ export default function StudentGroupPage() {
           </div>
           <p className="text-base font-semibold text-gray-700">You are not in a group yet</p>
           <p className="mt-1 text-sm text-gray-400 text-center max-w-xs">
-            Create a group to start your FYP journey or wait to be added by a group leader.
+            Create a group to start your FYP journey or accept an invitation from a group leader.
           </p>
           <button
             type="button"
@@ -392,7 +491,7 @@ export default function StudentGroupPage() {
                 </div>
               </div>
 
-              {group.phase && (
+              {group.phase && publicSettings.show_phase_to_students !== 'false' && (
                 <p className="text-sm text-gray-500 mt-1">
                   <span className="font-medium text-gray-700">Phase: </span>
                   {group.phase.session?.name} — {group.phase.phase.replace('_', ' ')}
@@ -419,7 +518,7 @@ export default function StudentGroupPage() {
                     className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                   >
                     <UserPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    Add Member
+                    Invite Member
                   </button>
                 )}
               </div>
@@ -590,7 +689,7 @@ export default function StudentGroupPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-gray-900">Supervisor Preferences</h2>
-                {group.preferences.length > 0 && (
+                {group.preferences.length > 0 && publicSettings.show_supervisor_to_student !== 'false' && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
                     <CheckCircle className="h-3 w-3" strokeWidth={2} />
                     Submitted
@@ -598,7 +697,12 @@ export default function StudentGroupPage() {
                 )}
               </div>
 
-              {group.preferences.length === 0 ? (
+              {publicSettings.show_supervisor_to_student === 'false' ? (
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                  <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
+                  <p className="text-sm text-gray-500">Supervisor information is currently hidden by the administrator.</p>
+                </div>
+              ) : group.preferences.length === 0 ? (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-400 italic">Not submitted yet.</p>
                   {isLeader && (
@@ -713,11 +817,11 @@ export default function StudentGroupPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Member Dialog ── */}
+      {/* ── Invite Member Dialog ── */}
       <Dialog open={addMemberOpen} onOpenChange={(open) => { if (!open) { setAddMemberError(null); setAddMemberSuccess(null); } setAddMemberOpen(open); }}>
         <DialogContent className="sm:max-w-sm" showCloseButton>
           <DialogHeader>
-            <DialogTitle>Add Group Member</DialogTitle>
+            <DialogTitle>Invite Group Member</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
             <div>
@@ -739,7 +843,8 @@ export default function StudentGroupPage() {
               </div>
             )}
             {addMemberSuccess && (
-              <div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+              <div className="flex items-center gap-2.5 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+                <CheckCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {addMemberSuccess}
               </div>
             )}
@@ -758,7 +863,7 @@ export default function StudentGroupPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {addMemberLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {addMemberLoading ? 'Adding…' : 'Add Member'}
+                {addMemberLoading ? 'Sending…' : 'Send Invite'}
               </button>
             </div>
           </div>
@@ -881,9 +986,18 @@ export default function StudentGroupPage() {
             )}
 
             {prefsError && (
-              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {prefsError}
-              </div>
+              prefsError.includes('Complete your profile') ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  {prefsError}{' '}
+                  <Link href="/dashboard/student/profile" className="font-semibold underline hover:text-amber-900">
+                    Go to Profile →
+                  </Link>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {prefsError}
+                </div>
+              )
             )}
 
             <div className="flex items-center justify-end gap-2 pt-1">

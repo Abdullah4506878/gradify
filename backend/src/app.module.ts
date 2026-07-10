@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AdminModule } from './admin/admin.module';
 import { AcademicSessionModule } from './academic-session/academic-session.module';
 import { AuthModule } from './auth/auth.module';
 import { DepartmentModule } from './department/department.module';
@@ -14,10 +15,12 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProgramModule } from './program/program.module';
 import { UniversityModule } from './university/university.module';
 import { UsersModule } from './users/users.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
     PrismaModule,
+    AdminModule,
     UsersModule,
     AuthModule,
     UniversityModule,
@@ -30,6 +33,7 @@ import { UsersModule } from './users/users.module';
     TasksModule,
     ProposalModule,
     NotificationModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

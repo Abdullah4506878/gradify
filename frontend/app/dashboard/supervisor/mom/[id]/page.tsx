@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -295,7 +295,7 @@ export default function MOMDetailPage() {
             )}
 
             {/* Header card */}
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
               <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 text-center">
                 <div className="flex justify-center mb-2">
                   {logoError ? (

@@ -80,6 +80,13 @@ export default function SupervisorGroupsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewGroup, setViewGroup] = useState<Group | null>(null);
+  const [groupsHidden, setGroupsHidden] = useState(false);
+
+  useEffect(() => {
+    api.get<Record<string, string>>('/settings/public')
+      .then((r) => { if (r.data?.show_group_to_supervisor === 'false') setGroupsHidden(true); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -130,6 +137,19 @@ export default function SupervisorGroupsPage() {
         </div>
       </div>
 
+      {groupsHidden ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white py-20 px-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 mb-4">
+            <FolderOpen className="h-6 w-6 text-gray-300" strokeWidth={1.75} />
+          </div>
+          <p className="text-base font-semibold text-gray-700">Groups are currently hidden</p>
+          <p className="mt-1 text-sm text-gray-400 text-center max-w-xs">
+            The administrator has temporarily hidden group information.
+          </p>
+        </div>
+      ) : (
+      <>
+
       {/* Search */}
       <div className="mb-4 relative max-w-sm">
         <Search
@@ -146,7 +166,7 @@ export default function SupervisorGroupsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">
@@ -331,6 +351,8 @@ export default function SupervisorGroupsPage() {
           })()}
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </DashboardLayout>
   );
 }

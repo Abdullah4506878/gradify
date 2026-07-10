@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -11,8 +11,6 @@ import {
   ClipboardCheck,
   PlusCircle,
   Loader2,
-  ExternalLink,
-  Download,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,9 +32,6 @@ const navItems = [
 ];
 
 type TaskStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'MINOR_ISSUES' | 'REJECTED';
-type TaskType = 'DOCUMENTATION' | 'DEVELOPMENT_WEB' | 'DEVELOPMENT_MOBILE';
-
-type FypRole = 'DOCUMENTATION' | 'DEVELOPMENT';
 
 interface GroupMember {
   id: number;
@@ -46,7 +41,6 @@ interface GroupMember {
 
 interface GroupEnrollment {
   userId: number;
-  fypRole: FypRole | null;
   user: GroupMember;
 }
 
@@ -56,43 +50,28 @@ interface Group {
   members: GroupEnrollment[];
 }
 
-interface TaskSubmission {
+interface MemberStatus {
   id: number;
-  description?: string | null;
-  fileUrl?: string | null;
-  githubLink?: string | null;
-  createdAt: string;
-  user: { id: number; name: string | null; email: string };
-}
-
-interface TaskReview {
-  id: number;
-  status: TaskStatus;
-  reason: string;
-  createdAt: string;
-  reviewer: { id: number; name: string | null; email: string };
+  userId: number;
+  isDone: boolean;
+  user: GroupMember;
 }
 
 interface Task {
   id: number;
   title: string;
   description?: string | null;
-  type: TaskType;
-  deadline?: string | null;
+  deadline: string;
   status: TaskStatus;
-  assignedTo: { id: number; name: string | null; email: string };
-  group: { id: number; fypId: string | null };
-  submissions: TaskSubmission[];
-  reviews: TaskReview[];
+  group: {
+    id: number;
+    fypId: string | null;
+    members: GroupEnrollment[];
+  };
+  memberStatuses: MemberStatus[];
 }
 
 type Flash = { type: 'success' | 'error'; text: string };
-
-const TYPE_BADGES: Record<TaskType, { label: string; className: string }> = {
-  DOCUMENTATION: { label: '📄 Documentation', className: 'bg-blue-50 text-blue-700' },
-  DEVELOPMENT_WEB: { label: '🌐 Web Dev', className: 'bg-green-50 text-green-700' },
-  DEVELOPMENT_MOBILE: { label: '📱 Mobile Dev', className: 'bg-purple-50 text-purple-700' },
-};
 
 const STATUS_BADGES: Record<TaskStatus, { label: string; className: string }> = {
   PENDING: { label: 'Pending', className: 'bg-gray-100 text-gray-600' },
@@ -114,30 +93,30 @@ function SkeletonRow({ cols }: { cols: number }) {
   );
 }
 
+function formatDeadline(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) +
+    ' by 11:59 PM';
+}
+
 export default function SupervisorTasksPage() {
-  const [activeTab, setActiveTab] = useState<'assigned' | 'reviews'>('assigned');
+  const [activeTab, setActiveTab] = useState<'assigned' | 'pending'>('assigned');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<Flash | null>(null);
 
-  // Assign dialog
   const [showAssign, setShowAssign] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [taskType, setTaskType] = useState<TaskType | ''>('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
-  const [taskDue, setTaskDue] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
-  // Review dialog
-  const [reviewTask, setReviewTask] = useState<Task | null>(null);
-  const [reviewStatus, setReviewStatus] = useState<'APPROVED' | 'MINOR_ISSUES' | 'REJECTED' | ''>('');
-  const [reviewReason, setReviewReason] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [memberToggles, setMemberToggles] = useState<Record<number, boolean>>({});
+  const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const showFlash = (f: Flash) => {
     setFlash(f);
@@ -146,7 +125,7 @@ export default function SupervisorTasksPage() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await api.get<Task[]>('/tasks');
+      const res = await api.get<Task[]>('/tasks/supervisor/my-tasks');
       setTasks(res.data);
     } catch {
       // keep empty on failure
@@ -160,11 +139,8 @@ export default function SupervisorTasksPage() {
   const openAssignDialog = async () => {
     setShowAssign(true);
     setSelectedGroupId('');
-    setSelectedStudentId('');
-    setTaskType('');
     setTaskTitle('');
     setTaskDesc('');
-    setTaskDue('');
     setAssignError(null);
     try {
       const res = await api.get<Group[]>('/groups');
@@ -174,14 +150,8 @@ export default function SupervisorTasksPage() {
     }
   };
 
-  const selectedGroup = groups.find((g) => String(g.id) === selectedGroupId);
-  const groupEnrollments = selectedGroup?.members ?? [];
-  const groupMembers = groupEnrollments.map((e) => e.user);
-  const selectedEnrollment = groupEnrollments.find((e) => String(e.user.id) === selectedStudentId);
-  const selectedStudentRole = selectedEnrollment?.fypRole ?? null;
-
   const handleAssign = async () => {
-    if (!selectedGroupId || !selectedStudentId || !taskType || !taskTitle.trim() || !taskDesc.trim()) {
+    if (!selectedGroupId || !taskTitle.trim() || !taskDesc.trim()) {
       setAssignError('Please fill in all required fields.');
       return;
     }
@@ -190,15 +160,12 @@ export default function SupervisorTasksPage() {
     try {
       await api.post('/tasks', {
         groupId: Number(selectedGroupId),
-        assignedToId: Number(selectedStudentId),
-        type: taskType,
         title: taskTitle.trim(),
         description: taskDesc.trim(),
-        deadline: taskDue || undefined,
       });
       setShowAssign(false);
       await fetchTasks();
-      showFlash({ type: 'success', text: 'Task assigned successfully.' });
+      showFlash({ type: 'success', text: 'Task assigned to group successfully.' });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setAssignError(typeof msg === 'string' ? msg : 'Failed to assign task. Please try again.');
@@ -207,41 +174,40 @@ export default function SupervisorTasksPage() {
     }
   };
 
-  const openReviewDialog = (task: Task) => {
-    setReviewTask(task);
-    setReviewStatus('');
-    setReviewReason('');
-    setReviewError(null);
+  const openDetailDialog = (task: Task) => {
+    setDetailTask(task);
+    setApprovalError(null);
+    const toggles: Record<number, boolean> = {};
+    for (const enrollment of task.group.members) {
+      const existing = task.memberStatuses.find((s) => s.userId === enrollment.userId);
+      toggles[enrollment.userId] = existing?.isDone ?? false;
+    }
+    setMemberToggles(toggles);
   };
 
-  const handleReview = async () => {
-    if (!reviewTask || !reviewStatus) {
-      setReviewError('Please select a review decision.');
-      return;
-    }
-    if (!reviewReason.trim()) {
-      setReviewError('Please provide a reason for your decision.');
-      return;
-    }
-    setReviewError(null);
-    setSubmittingReview(true);
+  const handleApproveMembers = async () => {
+    if (!detailTask) return;
+    const memberStatuses = detailTask.group.members.map((m) => ({
+      userId: m.userId,
+      isDone: memberToggles[m.userId] ?? false,
+    }));
+
+    setApprovalError(null);
+    setSubmittingApproval(true);
     try {
-      const res = await api.post<Task>(`/tasks/${reviewTask.id}/review`, {
-        status: reviewStatus,
-        reason: reviewReason,
-      });
-      setTasks((prev) => prev.map((t) => t.id === reviewTask.id ? res.data : t));
-      setReviewTask(null);
-      showFlash({ type: 'success', text: 'Review submitted successfully.' });
+      const res = await api.patch<Task>(`/tasks/${detailTask.id}/approve-members`, { memberStatuses });
+      setTasks((prev) => prev.map((t) => (t.id === detailTask.id ? res.data : t)));
+      setDetailTask(null);
+      showFlash({ type: 'success', text: 'Member statuses saved successfully.' });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setReviewError(typeof msg === 'string' ? msg : 'Failed to submit review. Please try again.');
+      setApprovalError(typeof msg === 'string' ? msg : 'Failed to save member statuses. Please try again.');
     } finally {
-      setSubmittingReview(false);
+      setSubmittingApproval(false);
     }
   };
 
-  const submittedTasks = tasks.filter((t) => t.status === 'SUBMITTED');
+  const pendingTasks = tasks.filter((t) => t.status === 'PENDING');
 
   return (
     <DashboardLayout navItems={navItems}>
@@ -249,7 +215,7 @@ export default function SupervisorTasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Tasks</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {loading ? 'Loading…' : `${tasks.length} task${tasks.length !== 1 ? 's' : ''} assigned`}
+            {loading ? 'Loading…' : `${tasks.length} group task${tasks.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <button
@@ -268,39 +234,48 @@ export default function SupervisorTasksPage() {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">
         <button
           type="button"
           onClick={() => setActiveTab('assigned')}
           className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'assigned' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-          Assigned Tasks
+          All Tasks
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('reviews')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'reviews' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === 'pending' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-          Pending Reviews
-          {submittedTasks.length > 0 && (
+          Pending Approval
+          {pendingTasks.length > 0 && (
             <span className="inline-flex items-center justify-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 min-w-[1.25rem]">
-              {submittedTasks.length}
+              {pendingTasks.length}
             </span>
           )}
         </button>
       </div>
 
-      {/* Tab 1: Assigned Tasks */}
-      {activeTab === 'assigned' && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      {(activeTab === 'assigned' ? tasks : pendingTasks).length === 0 && !loading ? (
+        <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="flex flex-col items-center justify-center py-16 px-6">
+            <ClipboardList className="h-8 w-8 text-gray-300 mb-3" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-gray-500">
+              {activeTab === 'pending' ? 'No tasks pending approval' : 'No tasks assigned yet'}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              {activeTab === 'pending' ? 'Tasks awaiting member approval will appear here.' : 'Click "Assign New Task" to get started.'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100">
             <thead>
               <tr className="bg-gray-50">
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-10">#</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Student</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Group</th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Task Title</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Type</th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Due Date</th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                 <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
@@ -308,34 +283,24 @@ export default function SupervisorTasksPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
-              ) : tasks.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="flex flex-col items-center justify-center py-16 px-6">
-                      <ClipboardList className="h-8 w-8 text-gray-300 mb-3" strokeWidth={1.5} />
-                      <p className="text-sm font-medium text-gray-500">No tasks assigned yet</p>
-                      <p className="mt-1 text-xs text-gray-400">Click "Assign New Task" to get started.</p>
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
               ) : (
-                tasks.map((task, idx) => {
-                  const type = TYPE_BADGES[task.type] ?? { label: task.type, className: 'bg-gray-100 text-gray-600' };
+                (activeTab === 'assigned' ? tasks : pendingTasks).map((task, idx) => {
                   const status = STATUS_BADGES[task.status] ?? STATUS_BADGES.PENDING;
+                  const doneCount = task.memberStatuses.filter((s) => s.isDone).length;
+                  const memberCount = task.group.members.length;
                   return (
                     <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-400 tabular-nums">{idx + 1}</td>
                       <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-gray-900">{task.assignedTo.name ?? task.assignedTo.email}</p>
-                        <p className="text-xs text-gray-400">{task.group.fypId}</p>
+                        <p className="font-mono text-sm font-medium text-gray-900">{task.group.fypId ?? `Group #${task.group.id}`}</p>
+                        {task.status === 'APPROVED' && memberCount > 0 && (
+                          <p className="text-xs text-gray-400">{doneCount}/{memberCount} members done</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700 font-medium">{task.title}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${type.className}`}>{type.label}</span>
-                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {task.deadline ? new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                        {formatDeadline(task.deadline)}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}>{status.label}</span>
@@ -343,10 +308,14 @@ export default function SupervisorTasksPage() {
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
-                          onClick={() => openReviewDialog(task)}
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                          onClick={() => openDetailDialog(task)}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            task.status === 'PENDING'
+                              ? 'border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                              : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                          }`}
                         >
-                          View
+                          {task.status === 'PENDING' ? 'Approve Members' : 'View'}
                         </button>
                       </td>
                     </tr>
@@ -358,84 +327,19 @@ export default function SupervisorTasksPage() {
         </div>
       )}
 
-      {/* Tab 2: Pending Reviews */}
-      {activeTab === 'reviews' && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-10">#</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Student</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Task Title</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Type</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Submitted</th>
-                <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
-              ) : submittedTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="flex flex-col items-center justify-center py-16 px-6">
-                      <ClipboardCheck className="h-8 w-8 text-gray-300 mb-3" strokeWidth={1.5} />
-                      <p className="text-sm font-medium text-gray-500">No pending reviews</p>
-                      <p className="mt-1 text-xs text-gray-400">Tasks submitted by students will appear here.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                submittedTasks.map((task, idx) => {
-                  const type = TYPE_BADGES[task.type] ?? { label: task.type, className: 'bg-gray-100 text-gray-600' };
-                  const latestSubmission = task.submissions[0];
-                  return (
-                    <tr key={task.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-400 tabular-nums">{idx + 1}</td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-gray-900">{task.assignedTo.name ?? task.assignedTo.email}</p>
-                        <p className="text-xs text-gray-400">{task.group.fypId}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">{task.title}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${type.className}`}>{type.label}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {latestSubmission ? new Date(latestSubmission.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openReviewDialog(task)}
-                          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 transition-colors"
-                        >
-                          Review
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── Assign Task Dialog ── */}
       <Dialog open={showAssign} onOpenChange={(open) => { if (!open) setShowAssign(false); }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" showCloseButton>
           <DialogHeader>
             <DialogTitle>Assign New Task</DialogTitle>
           </DialogHeader>
           <div className="pt-2 space-y-4">
-            {/* Group */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Group <span className="text-red-500">*</span>
               </label>
               <select
                 value={selectedGroupId}
-                onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedStudentId(''); }}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
               >
                 <option value="">Select group…</option>
@@ -445,65 +349,6 @@ export default function SupervisorTasksPage() {
               </select>
             </div>
 
-            {/* Student */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Student <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => {
-                  const newId = e.target.value;
-                  setSelectedStudentId(newId);
-                  const enrollment = groupEnrollments.find((en) => String(en.user.id) === newId);
-                  const role = enrollment?.fypRole;
-                  if (role === 'DOCUMENTATION') setTaskType('DOCUMENTATION');
-                  else if (role === 'DEVELOPMENT') setTaskType('DEVELOPMENT_WEB');
-                  else setTaskType('');
-                }}
-                disabled={!selectedGroupId}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors disabled:opacity-50"
-              >
-                <option value="">Select student…</option>
-                {groupMembers.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
-                ))}
-              </select>
-              {selectedStudentId && selectedStudentRole && (
-                <div className="mt-1.5">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${selectedStudentRole === 'DOCUMENTATION' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
-                    {selectedStudentRole === 'DOCUMENTATION' ? '📄 Documentation' : '💻 Development'}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Task Type */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Task Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={taskType}
-                onChange={(e) => setTaskType(e.target.value as TaskType)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-              >
-                {selectedStudentRole !== 'DOCUMENTATION' && selectedStudentRole !== 'DEVELOPMENT' && (
-                  <option value="">Select type…</option>
-                )}
-                {(!selectedStudentRole || selectedStudentRole === 'DOCUMENTATION') && (
-                  <option value="DOCUMENTATION">📄 Documentation</option>
-                )}
-                {(!selectedStudentRole || selectedStudentRole === 'DEVELOPMENT') && (
-                  <option value="DEVELOPMENT_WEB">🌐 Development – Web</option>
-                )}
-                {(!selectedStudentRole || selectedStudentRole === 'DEVELOPMENT') && (
-                  <option value="DEVELOPMENT_MOBILE">📱 Development – Mobile</option>
-                )}
-              </select>
-            </div>
-
-            {/* Title */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Title <span className="text-red-500">*</span>
@@ -517,7 +362,6 @@ export default function SupervisorTasksPage() {
               />
             </div>
 
-            {/* Description */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-gray-700">
@@ -530,21 +374,8 @@ export default function SupervisorTasksPage() {
                 maxLength={400}
                 value={taskDesc}
                 onChange={(e) => setTaskDesc(e.target.value)}
-                placeholder="Describe what the student needs to do…"
+                placeholder="Describe what the group needs to do…"
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
-              />
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Due Date <span className="text-xs text-gray-400 font-normal ml-1">(optional)</span>
-              </label>
-              <input
-                type="date"
-                value={taskDue}
-                onChange={(e) => setTaskDue(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
               />
             </div>
 
@@ -575,162 +406,100 @@ export default function SupervisorTasksPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Review / View Task Dialog ── */}
-      <Dialog open={!!reviewTask} onOpenChange={(open) => { if (!open) setReviewTask(null); }}>
+      <Dialog open={!!detailTask} onOpenChange={(open) => { if (!open) setDetailTask(null); }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" showCloseButton>
           <DialogHeader>
-            <DialogTitle>{reviewTask?.status === 'SUBMITTED' ? 'Review Task' : 'Task Details'}</DialogTitle>
+            <DialogTitle>
+              {detailTask?.status === 'PENDING' ? 'Approve Members' : 'Task Details'}
+            </DialogTitle>
           </DialogHeader>
-          {reviewTask && (() => {
-            const type = TYPE_BADGES[reviewTask.type] ?? { label: reviewTask.type, className: 'bg-gray-100 text-gray-600' };
-            const status = STATUS_BADGES[reviewTask.status] ?? STATUS_BADGES.PENDING;
-            const latestSubmission = reviewTask.submissions[0] ?? null;
+          {detailTask && (() => {
+            const status = STATUS_BADGES[detailTask.status] ?? STATUS_BADGES.PENDING;
+            const isPending = detailTask.status === 'PENDING';
 
             return (
               <div className="pt-2 space-y-4">
-                {/* Task info */}
                 <div className="rounded-xl bg-gray-50 px-4 py-3 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Task</p>
-                      <p className="text-sm font-semibold text-gray-900">{reviewTask.title}</p>
+                      <p className="text-sm font-semibold text-gray-900">{detailTask.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 font-mono">{detailTask.group.fypId ?? `Group #${detailTask.group.id}`}</p>
                     </div>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0 ${status.className}`}>{status.label}</span>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${type.className}`}>{type.label}</span>
-                    {reviewTask.deadline && (
-                      <span className="text-xs text-gray-500">Due: {new Date(reviewTask.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    )}
-                  </div>
-                  {reviewTask.description && (
+                  <p className="text-xs text-gray-500">
+                    Due: {formatDeadline(detailTask.deadline)}
+                  </p>
+                  {detailTask.description && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Description</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{reviewTask.description}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{detailTask.description}</p>
                     </div>
                   )}
                 </div>
 
-                {/* Student submission */}
-                {latestSubmission ? (
-                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Student Submission</p>
-                    {latestSubmission.description && (
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{latestSubmission.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-3">
-                      {latestSubmission.fileUrl && (
-                        <a
-                          href={`http://localhost:4000${latestSubmission.fileUrl}`}
-                          download
-                          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:text-blue-800 underline underline-offset-2"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Download File
-                        </a>
-                      )}
-                      {latestSubmission.githubLink && (
-                        <a
-                          href={latestSubmission.githubLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:text-blue-800 underline underline-offset-2"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          GitHub Link
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="text-sm text-gray-400 italic">No submission yet.</p>
-                  </div>
-                )}
-
-                {/* Review section — only for SUBMITTED tasks */}
-                {reviewTask.status === 'SUBMITTED' && (
-                  <div className="space-y-3 pt-1">
-                    <p className="text-sm font-semibold text-gray-700">Submit Review</p>
-
-                    {/* Decision buttons */}
-                    <div className="flex gap-2">
-                      {(['APPROVED', 'MINOR_ISSUES', 'REJECTED'] as const).map((s) => {
-                        const styles = {
-                          APPROVED: { active: 'bg-green-600 text-white border-green-600', inactive: 'border-green-200 text-green-700 hover:bg-green-50' },
-                          MINOR_ISSUES: { active: 'bg-yellow-500 text-white border-yellow-500', inactive: 'border-yellow-200 text-yellow-700 hover:bg-yellow-50' },
-                          REJECTED: { active: 'bg-red-600 text-white border-red-600', inactive: 'border-red-200 text-red-700 hover:bg-red-50' },
-                        };
-                        const labels = { APPROVED: 'Approve', MINOR_ISSUES: 'Minor Issues', REJECTED: 'Reject' };
-                        const isActive = reviewStatus === s;
-                        return (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-700">Group Members</p>
+                  {detailTask.group.members.map((enrollment) => {
+                    const member = enrollment.user;
+                    const isDone = memberToggles[enrollment.userId] ?? false;
+                    return (
+                      <div
+                        key={enrollment.userId}
+                        className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{member.name ?? member.email}</p>
+                          {member.name && <p className="text-xs text-gray-400">{member.email}</p>}
+                        </div>
+                        {isPending ? (
                           <button
-                            key={s}
                             type="button"
-                            onClick={() => setReviewStatus(s)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${isActive ? styles[s].active : styles[s].inactive}`}
+                            onClick={() => setMemberToggles((prev) => ({ ...prev, [enrollment.userId]: !prev[enrollment.userId] }))}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                              isDone ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}
                           >
-                            {labels[s]}
+                            {isDone ? 'Done ✅' : 'Not Done ❌'}
                           </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Reason */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Reason <span className="text-red-500">*</span>
-                        </label>
-                        <span className="text-xs text-gray-400">{reviewReason.length} / 300</span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                            isDone ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                          }`}>
+                            {isDone ? 'Done ✅' : 'Not Done ❌'}
+                          </span>
+                        )}
                       </div>
-                      <textarea
-                        rows={4}
-                        maxLength={300}
-                        value={reviewReason}
-                        onChange={(e) => { setReviewReason(e.target.value); setReviewError(null); }}
-                        placeholder="Provide detailed feedback (min. 30 characters)…"
-                        className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors resize-none"
-                      />
-                    </div>
+                    );
+                  })}
+                </div>
 
-                    {reviewError && (
-                      <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{reviewError}</div>
-                    )}
-
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setReviewTask(null)}
-                        disabled={submittingReview}
-                        className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleReview}
-                        disabled={submittingReview}
-                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {submittingReview && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {submittingReview ? 'Submitting…' : 'Submit Review'}
-                      </button>
-                    </div>
-                  </div>
+                {approvalError && (
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{approvalError}</div>
                 )}
 
-                {reviewTask.status !== 'SUBMITTED' && (
-                  <div className="flex justify-end">
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDetailTask(null)}
+                    disabled={submittingApproval}
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {isPending ? 'Cancel' : 'Close'}
+                  </button>
+                  {isPending && (
                     <button
                       type="button"
-                      onClick={() => setReviewTask(null)}
-                      className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                      onClick={handleApproveMembers}
+                      disabled={submittingApproval}
+                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                     >
-                      Close
+                      {submittingApproval && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {submittingApproval ? 'Saving…' : 'Submit All'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })()}

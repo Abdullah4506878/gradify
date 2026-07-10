@@ -15,22 +15,8 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import type { LucideIcon } from 'lucide-react';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 const reportCards: { title: string; description: string; icon: LucideIcon }[] = [
   {
@@ -52,7 +38,7 @@ const reportCards: { title: string; description: string; icon: LucideIcon }[] = 
 
 export default function ReportsPage() {
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Reports</h1>
@@ -91,6 +77,6 @@ export default function ReportsPage() {
           </p>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

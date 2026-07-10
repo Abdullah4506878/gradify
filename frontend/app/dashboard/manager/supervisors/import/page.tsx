@@ -1,39 +1,10 @@
-﻿'use client';
+'use client';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  FolderOpen,
-  BarChart,
-  User,
-  ArrowLeft,
-  Upload,
-  FileText,
-  X,
-  ClipboardCheck,
-  ClipboardList,
-  BarChart2,
-  BookOpen,
-} from 'lucide-react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ArrowLeft, Upload, FileText, X } from 'lucide-react';
 import api from '@/lib/api';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 interface ImportResult {
   imported: number;
@@ -50,8 +21,8 @@ export default function ImportSupervisorsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith('.csv')) {
-      setError('Only .csv files are accepted.');
+    if (!f.name.endsWith('.xlsx')) {
+      setError('Only .xlsx files are accepted.');
       return;
     }
     setError(null);
@@ -68,7 +39,7 @@ export default function ImportSupervisorsPage() {
 
   const handleUpload = async () => {
     if (!file) {
-      setError('Please select a CSV file first.');
+      setError('Please select an Excel file first.');
       return;
     }
     setError(null);
@@ -91,7 +62,7 @@ export default function ImportSupervisorsPage() {
   };
 
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Back link + header */}
       <div className="mb-6">
         <Link
@@ -102,22 +73,10 @@ export default function ImportSupervisorsPage() {
           Back to Supervisors
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Import Supervisors</h1>
-        <p className="mt-1 text-sm text-gray-500">Bulk import supervisor accounts from a CSV file</p>
+        <p className="mt-1 text-sm text-gray-500">Bulk-add from an Excel file</p>
       </div>
 
       <div className="max-w-lg space-y-5">
-        {/* Format hint */}
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4">
-          <p className="text-sm font-medium text-indigo-800 mb-1">Required CSV format</p>
-          <p className="text-xs text-indigo-600 mb-2">The file must include the following columns (header row required):</p>
-          <code className="block rounded-lg bg-indigo-100 px-3 py-2 text-xs font-mono text-indigo-900">
-            name, email, rollNumber
-          </code>
-          <p className="mt-2 text-xs text-indigo-600">
-            Accepts <span className="font-semibold">.csv</span> and <span className="font-semibold">.xlsx</span>. Role will be set to <span className="font-semibold">SUPERVISOR</span> automatically.
-          </p>
-        </div>
-
         {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -135,7 +94,7 @@ export default function ImportSupervisorsPage() {
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx"
+            accept=".xlsx"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
@@ -153,13 +112,12 @@ export default function ImportSupervisorsPage() {
               </button>
             </>
           ) : (
-            <>
+            <div className="flex flex-col items-center">
               <Upload className="h-8 w-8 text-gray-300 mb-3" strokeWidth={1.5} />
               <p className="text-sm font-medium text-gray-600">
-                Drop your CSV here, or <span className="text-indigo-600">browse</span>
+                Drop your Excel file here, or <span className="text-indigo-600">browse</span>
               </p>
-              <p className="text-xs text-gray-400 mt-1">Only .csv files accepted</p>
-            </>
+            </div>
           )}
         </div>
 
@@ -216,6 +174,6 @@ export default function ImportSupervisorsPage() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

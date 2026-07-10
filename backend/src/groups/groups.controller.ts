@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -68,6 +69,37 @@ export class GroupsController {
     return this.groupsService.setMyRole(req.user.id, role);
   }
 
+  // ── Invite endpoints (must be before :id routes) ─────────────────────────
+
+  @Get('invites/pending')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  getPendingInvites(@Req() req: AuthRequest) {
+    return this.groupsService.getPendingInvites(req.user.id);
+  }
+
+  @Post('invites/:inviteId/accept')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  acceptInvite(
+    @Param('inviteId', ParseIntPipe) inviteId: number,
+    @Req() req: AuthRequest,
+  ) {
+    return this.groupsService.acceptInvite(inviteId, req.user.id);
+  }
+
+  @Post('invites/:inviteId/reject')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  rejectInvite(
+    @Param('inviteId', ParseIntPipe) inviteId: number,
+    @Req() req: AuthRequest,
+  ) {
+    return this.groupsService.rejectInvite(inviteId, req.user.id);
+  }
+
+  // ── :id routes ────────────────────────────────────────────────────────────
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.groupsService.findOne(id);
@@ -79,10 +111,10 @@ export class GroupsController {
   join(
     @Param('id', ParseIntPipe) groupId: number,
     @Req() req: AuthRequest,
-    @Body('userId') bodyUserId?: number,
+    @Body('userId') invitedId: number,
   ) {
-    const userId = bodyUserId ?? req.user.id;
-    return this.groupsService.joinGroup(groupId, userId);
+    if (!invitedId) throw new BadRequestException('userId is required');
+    return this.groupsService.inviteMember(groupId, req.user.id, invitedId);
   }
 
   @Post(':id/preferences')
@@ -112,5 +144,28 @@ export class GroupsController {
     @Body() dto: UpdateGroupStatusDto,
   ) {
     return this.groupsService.updateStatus(id, dto.status);
+  }
+
+  @Patch(':id/manager-edit')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  managerEditGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    data: {
+      addMemberEmail?: string;
+      removeMemberId?: number;
+      newLeaderId?: number;
+      newSupervisorId?: number;
+    },
+  ) {
+    return this.groupsService.managerEditGroup(id, data);
+  }
+
+  @Delete(':id/manager-delete')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  managerDeleteGroup(@Param('id', ParseIntPipe) id: number) {
+    return this.groupsService.managerDeleteGroup(id);
   }
 }

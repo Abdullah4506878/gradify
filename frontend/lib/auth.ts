@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserRole = 'MANAGER' | 'SUPERVISOR' | 'STUDENT';
+export type UserRole = 'MANAGER' | 'SUPERVISOR' | 'STUDENT' | 'SUPER_ADMIN';
 
 export interface AuthUser {
   id: number;
@@ -11,7 +11,7 @@ export interface AuthUser {
 interface AuthState {
   token: string | null;
   user: AuthUser | null;
-  setAuth: (token: string, user: AuthUser) => void;
+  setAuth: (token: string, user: AuthUser, refreshToken?: string) => void;
   logout: () => void;
 }
 
@@ -30,14 +30,16 @@ export const useAuthStore = create<AuthState>((set) => ({
           }
         })()
       : null,
-  setAuth: (token, user) => {
+  setAuth: (token, user, refreshToken?) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
+    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`;
     set({ token, user });
   },
   logout: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     document.cookie = 'auth_token=; path=/; max-age=0';
     set({ token: null, user: null });

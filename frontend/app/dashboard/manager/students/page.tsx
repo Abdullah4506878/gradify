@@ -1,12 +1,7 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  FolderOpen,
-  BarChart,
   Search,
   Upload,
   UserPlus,
@@ -18,10 +13,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
-  ClipboardCheck,
-  ClipboardList,
-  BarChart2,
-  BookOpen,
+  Code2,
+  Link as LinkIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -36,31 +29,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import api from '@/lib/api';
 import { exportToExcel, exportToPDF } from '@/lib/export';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 interface Student {
   id: number;
   name: string | null;
   rollNumber: string | null;
+  section?: string | null;
   email: string;
   role: string;
   createdAt: string;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
 }
 
 type Flash = { type: 'success' | 'error'; text: string };
@@ -72,11 +54,11 @@ function getRollNumber(student: Student): string {
 function SkeletonRow() {
   return (
     <tr className="border-b border-gray-100">
-      {[1, 2, 3, 4, 5].map((i) => (
+      {[1, 2, 3, 4, 5, 6].map((i) => (
         <td key={i} className="px-6 py-4">
           <div
             className="h-4 animate-pulse rounded bg-gray-200"
-            style={{ width: i === 1 ? '2rem' : i === 5 ? '7rem' : '60%' }}
+            style={{ width: i === 1 ? '2rem' : i === 6 ? '7rem' : '60%' }}
           />
         </td>
       ))}
@@ -88,6 +70,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteAllLoading, setDeleteAllLoading] = useState(false);
   const [flash, setFlash] = useState<Flash | null>(null);
@@ -97,6 +80,22 @@ export default function StudentsPage() {
     setFlash(f);
     setTimeout(() => setFlash(null), 4000);
   };
+
+  // Read import result from URL params (set by students/import page on redirect)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const added = params.get('added');
+    const updated = params.get('updated');
+    const skipped = params.get('skipped');
+    if (added !== null || updated !== null) {
+      showFlash({
+        type: 'success',
+        text: `Import complete — ${added ?? 0} added, ${updated ?? 0} updated, ${skipped ?? 0} skipped.`,
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchStudents() {
@@ -142,12 +141,17 @@ export default function StudentsPage() {
     }
   };
 
+  const uniqueSections = Array.from(
+    new Set(students.flatMap((s) => (s.section ? [s.section] : [])))
+  ).sort();
+
   const getExportData = () =>
     students.map((s, idx) => ({
       '#': idx + 1,
       Name: s.name ?? '',
       'Roll Number': getRollNumber(s),
       Email: s.email,
+      Section: s.section ?? '',
       Role: 'Student',
       'Joined Date': new Date(s.createdAt).toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric',
@@ -159,12 +163,13 @@ export default function StudentsPage() {
   };
 
   const handleExportPDF = async () => {
-    const headers = ['#', 'Name', 'Roll Number', 'Email', 'Role', 'Joined Date'];
+    const headers = ['#', 'Name', 'Roll Number', 'Email', 'Section', 'Role', 'Joined Date'];
     const rows = students.map((s, idx) => [
       String(idx + 1),
       s.name ?? '',
       getRollNumber(s),
       s.email,
+      s.section ?? '',
       'Student',
       new Date(s.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     ]);
@@ -173,15 +178,16 @@ export default function StudentsPage() {
 
   const filtered = students.filter((s) => {
     const q = search.toLowerCase();
-    return (
+    const matchesSearch =
       (s.name ?? '').toLowerCase().includes(q) ||
       s.email.toLowerCase().includes(q) ||
-      getRollNumber(s).toLowerCase().includes(q)
-    );
+      getRollNumber(s).toLowerCase().includes(q);
+    const matchesSection = !sectionFilter || s.section === sectionFilter;
+    return matchesSearch && matchesSection;
   });
 
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
@@ -257,20 +263,35 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="mb-4 relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} />
-        <input
-          type="text"
-          placeholder="Search by name, roll number or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-        />
+      {/* Search + Section filter */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} />
+          <input
+            type="text"
+            placeholder="Search by name, roll number or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+          />
+        </div>
+
+        {uniqueSections.length > 0 && (
+          <select
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            className="rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-8 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+          >
+            <option value="">All Sections</option>
+            {uniqueSections.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">
@@ -282,6 +303,9 @@ export default function StudentsPage() {
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Email
+              </th>
+              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Section
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Role
@@ -297,16 +321,16 @@ export default function StudentsPage() {
               Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="flex flex-col items-center justify-center py-16 px-6">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 mb-3">
                       <GraduationCap className="h-5 w-5 text-gray-300" strokeWidth={1.75} />
                     </div>
                     <p className="text-sm font-medium text-gray-500">
-                      {search ? 'No students match your search' : 'No students registered yet'}
+                      {search || sectionFilter ? 'No students match your filters' : 'No students registered yet'}
                     </p>
                     <p className="mt-1 text-xs text-gray-400">
-                      {search ? 'Try a different name or email.' : 'Add a student or import from a file.'}
+                      {search || sectionFilter ? 'Try a different name, email, or section.' : 'Add a student or import from a file.'}
                     </p>
                   </div>
                 </td>
@@ -333,6 +357,10 @@ export default function StudentsPage() {
                   </td>
 
                   <td className="px-6 py-4 text-sm text-gray-500">{student.email}</td>
+
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {student.section ?? <span className="text-gray-300">—</span>}
+                  </td>
 
                   <td className="px-6 py-4">
                     <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
@@ -386,6 +414,9 @@ export default function StudentsPage() {
                     {viewStudent.name ?? <span className="italic text-gray-400">No name</span>}
                   </p>
                   <p className="text-sm text-gray-500 font-mono">{getRollNumber(viewStudent)}</p>
+                  {viewStudent.section && (
+                    <p className="text-xs text-gray-400 mt-0.5">Section {viewStudent.section}</p>
+                  )}
                 </div>
               </div>
 
@@ -409,6 +440,36 @@ export default function StudentsPage() {
                     })}
                   </span>
                 </div>
+                <div className="flex items-center gap-3">
+                  <Code2 className="h-4 w-4 text-gray-400 shrink-0" strokeWidth={1.75} />
+                  {viewStudent.githubUrl ? (
+                    <a
+                      href={viewStudent.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-indigo-600 hover:underline truncate"
+                    >
+                      {viewStudent.githubUrl.replace('https://github.com/', '')}
+                    </a>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Not added</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <LinkIcon className="h-4 w-4 text-blue-400 shrink-0" strokeWidth={1.75} />
+                  {viewStudent.linkedinUrl ? (
+                    <a
+                      href={viewStudent.linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-indigo-600 hover:underline truncate"
+                    >
+                      {viewStudent.linkedinUrl.replace('https://linkedin.com/in/', '')}
+                    </a>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Not added</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end">
@@ -424,6 +485,6 @@ export default function StudentsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

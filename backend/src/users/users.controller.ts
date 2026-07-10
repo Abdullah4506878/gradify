@@ -22,7 +22,7 @@ import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateMeDto, UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeDto, UpdateProfileDto, UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
 interface AuthRequest extends Request {
@@ -86,6 +86,11 @@ export class UsersController {
   @Roles(Role.MANAGER)
   create(@Body() dto: CreateUserDto) {
     return this.usersService.createUser(dto);
+  }
+
+  @Patch('profile')
+  updateProfile(@Req() req: AuthRequest, @Body() dto: UpdateProfileDto) {
+    return this.usersService.updateProfile(req.user.id, dto);
   }
 
   @Patch('supervisors/workload-bulk')

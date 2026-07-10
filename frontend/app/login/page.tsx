@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -64,8 +64,28 @@ const ROLE_LABELS: Record<string, string> = {
 export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const [checking, setChecking] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Redirect already-authenticated users to their dashboard
+  useEffect(() => {
+    const stored = token ?? (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+    const storedUser = user ?? (() => {
+      try {
+        const u = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        return u ? JSON.parse(u) : null;
+      } catch { return null; }
+    })();
+    if (stored && storedUser?.role) {
+      router.replace(ROLE_REDIRECTS[storedUser.role] ?? '/dashboard');
+    } else {
+      setChecking(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     register,
@@ -81,16 +101,28 @@ export default function LoginPage() {
     try {
       const res = await api.post<{ accessToken: string; refreshToken: string }>(
         '/auth/login',
-        { email: data.email, password: data.password },
+        { email: data.email, password: data.password, role: data.role },
       );
-      const { accessToken } = res.data;
-      const user = decodeToken(accessToken);
-      setAuth(accessToken, user);
-      router.push(ROLE_REDIRECTS[user.role] ?? '/dashboard');
-    } catch {
-      setServerError('Invalid email or password. Please try again.');
+      const { accessToken, refreshToken } = res.data;
+      const decoded = decodeToken(accessToken);
+      setAuth(accessToken, decoded, refreshToken);
+      router.replace(ROLE_REDIRECTS[decoded.role] ?? '/dashboard');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setServerError(typeof msg === 'string' ? msg : 'Invalid email or password. Please try again.');
     }
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <svg className="h-8 w-8 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">

@@ -1,43 +1,14 @@
-﻿'use client';
+'use client';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  FolderOpen,
-  BarChart,
-  User,
-  ArrowLeft,
-  Upload,
-  FileText,
-  X,
-  ClipboardCheck,
-  ClipboardList,
-  BarChart2,
-  BookOpen,
-} from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ArrowLeft, Upload, FileText, X } from 'lucide-react';
 import api from '@/lib/api';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard/manager', icon: LayoutDashboard },
-  { label: 'Students', href: '/dashboard/manager/students', icon: Users },
-  { label: 'Supervisors', href: '/dashboard/manager/supervisors', icon: Briefcase },
-  { label: 'Workload', href: '/dashboard/manager/supervisors/workload', icon: BarChart2 },
-  { label: 'Groups', href: '/dashboard/manager/groups', icon: FolderOpen },
-  { label: 'FYP Projects', href: '/dashboard/manager/fyp-projects', icon: BookOpen },
-  { label: 'Minutes of Meeting', href: '/dashboard/manager/mom', icon: FileText },
-  { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
-  { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
-  { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
-  { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
-];
 
 interface ImportResult {
-  imported: number;
+  added: number;
+  updated: number;
   skipped: number;
   errors: string[];
 }
@@ -51,8 +22,8 @@ export default function ImportStudentsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith('.csv')) {
-      setError('Only .csv files are accepted.');
+    if (!f.name.endsWith('.xlsx')) {
+      setError('Only .xlsx files are accepted.');
       return;
     }
     setError(null);
@@ -69,7 +40,7 @@ export default function ImportStudentsPage() {
 
   const handleUpload = async () => {
     if (!file) {
-      setError('Please select a CSV file first.');
+      setError('Please select an Excel file first.');
       return;
     }
     setError(null);
@@ -92,7 +63,7 @@ export default function ImportStudentsPage() {
   };
 
   return (
-    <DashboardLayout navItems={navItems}>
+    <>
       {/* Back link + header */}
       <div className="mb-6">
         <Link
@@ -103,22 +74,10 @@ export default function ImportStudentsPage() {
           Back to Students
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Import Students</h1>
-        <p className="mt-1 text-sm text-gray-500">Bulk-add students from a CSV file</p>
+        <p className="mt-1 text-sm text-gray-500">Bulk-add from an Excel file</p>
       </div>
 
       <div className="max-w-lg space-y-5">
-        {/* Format hint */}
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-4">
-          <p className="text-sm font-medium text-indigo-800 mb-1">Required CSV format</p>
-          <p className="text-xs text-indigo-600 mb-2">The file must include the following columns (header row required):</p>
-          <code className="block rounded-lg bg-indigo-100 px-3 py-2 text-xs font-mono text-indigo-900">
-            name, email, role, rollNumber
-          </code>
-          <p className="mt-2 text-xs text-indigo-600">
-            Accepts <span className="font-semibold">.csv</span> and <span className="font-semibold">.xlsx</span>. Valid roles: <span className="font-semibold">STUDENT</span>, <span className="font-semibold">SUPERVISOR</span>, <span className="font-semibold">MANAGER</span>
-          </p>
-        </div>
-
         {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -136,7 +95,7 @@ export default function ImportStudentsPage() {
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx"
+            accept=".xlsx"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
@@ -154,13 +113,12 @@ export default function ImportStudentsPage() {
               </button>
             </>
           ) : (
-            <>
+            <div className="flex flex-col items-center">
               <Upload className="h-8 w-8 text-gray-300 mb-3" strokeWidth={1.5} />
               <p className="text-sm font-medium text-gray-600">
-                Drop your CSV here, or <span className="text-indigo-600">browse</span>
+                Drop your Excel file here, or <span className="text-indigo-600">browse</span>
               </p>
-              <p className="text-xs text-gray-400 mt-1">Only .csv files accepted</p>
-            </>
+            </div>
           )}
         </div>
 
@@ -177,7 +135,10 @@ export default function ImportStudentsPage() {
             <p className="text-sm font-semibold text-green-800">Import complete</p>
             <div className="flex gap-6 text-sm">
               <span className="text-green-700">
-                <span className="font-bold text-green-900">{result.imported}</span> imported
+                <span className="font-bold text-green-900">{result.added}</span> added
+              </span>
+              <span className="text-blue-700">
+                <span className="font-bold text-blue-900">{result.updated}</span> updated
               </span>
               <span className="text-yellow-700">
                 <span className="font-bold text-yellow-900">{result.skipped}</span> skipped
@@ -198,7 +159,7 @@ export default function ImportStudentsPage() {
           </div>
         )}
 
-        {/* Upload button */}
+        {/* Actions */}
         <div className="flex items-center justify-end gap-2">
           <Link
             href="/dashboard/manager/students"
@@ -217,6 +178,6 @@ export default function ImportStudentsPage() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }
