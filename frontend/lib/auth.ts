@@ -6,6 +6,7 @@ export interface AuthUser {
   id: number;
   email: string;
   role: UserRole;
+  isFirstLogin?: boolean;
 }
 
 interface AuthState {
@@ -35,6 +36,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.setItem('user', JSON.stringify(user));
     if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`;
+    // Lets the edge proxy gate first-login users without decoding the JWT body.
+    document.cookie = `first_login=${user.isFirstLogin ? '1' : '0'}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`;
     set({ token, user });
   },
   logout: () => {
@@ -42,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     document.cookie = 'auth_token=; path=/; max-age=0';
+    document.cookie = 'first_login=; path=/; max-age=0';
     set({ token: null, user: null });
   },
 }));

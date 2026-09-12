@@ -47,7 +47,7 @@ export class GroupsController {
     if (!user || !user.universityId) {
       throw new BadRequestException('User university not found');
     }
-    return this.groupsService.create(req.user.id, dto, user.universityId);
+    return this.groupsService.create(req.user.id, dto, user.universityId, req.user, req.ip);
   }
 
   @Get()
@@ -85,7 +85,7 @@ export class GroupsController {
     @Param('inviteId', ParseIntPipe) inviteId: number,
     @Req() req: AuthRequest,
   ) {
-    return this.groupsService.acceptInvite(inviteId, req.user.id);
+    return this.groupsService.acceptInvite(inviteId, req.user.id, req.user, req.ip);
   }
 
   @Post('invites/:inviteId/reject')
@@ -151,6 +151,7 @@ export class GroupsController {
   @Roles(Role.MANAGER)
   managerEditGroup(
     @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthRequest,
     @Body()
     data: {
       addMemberEmail?: string;
@@ -159,13 +160,13 @@ export class GroupsController {
       newSupervisorId?: number;
     },
   ) {
-    return this.groupsService.managerEditGroup(id, data);
+    return this.groupsService.managerEditGroup(id, data, req.user, req.ip);
   }
 
   @Delete(':id/manager-delete')
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER)
-  managerDeleteGroup(@Param('id', ParseIntPipe) id: number) {
-    return this.groupsService.managerDeleteGroup(id);
+  managerDeleteGroup(@Param('id', ParseIntPipe) id: number, @Req() req: AuthRequest) {
+    return this.groupsService.managerDeleteGroup(id, req.user, req.ip);
   }
 }

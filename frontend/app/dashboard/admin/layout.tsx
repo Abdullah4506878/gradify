@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   LayoutGrid,
+  Megaphone,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth';
 import {
@@ -56,13 +57,17 @@ const NAV_GROUPS = [
   },
   {
     label: 'Users',
-    items: [{ label: 'Managers', href: '/dashboard/admin/managers', icon: Users }],
+    items: [
+      { label: 'Managers', href: '/dashboard/admin/managers', icon: Users },
+      { label: 'Users',    href: '/dashboard/admin/users',    icon: Users },
+    ],
   },
   {
     label: 'System',
     items: [
-      { label: 'Activity Log', href: '/dashboard/admin/activity-log', icon: Activity },
-      { label: 'Settings',     href: '/dashboard/admin/settings',     icon: Settings },
+      { label: 'Activity Log',   href: '/dashboard/admin/activity-log',   icon: Activity },
+      { label: 'Announcements',  href: '/dashboard/admin/announcements',  icon: Megaphone },
+      { label: 'Settings',       href: '/dashboard/admin/settings',       icon: Settings },
     ],
   },
 ];

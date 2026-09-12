@@ -45,7 +45,22 @@ interface Student {
   linkedinUrl?: string | null;
 }
 
+interface WeeklyCommit {
+  id: number;
+  userId: number;
+  weekStart: string;
+  commitCount: number;
+  lastCommit: string | null;
+  repos: string | null;
+}
+
 type Flash = { type: 'success' | 'error'; text: string };
+
+function commitBadge(count: number): { label: string; className: string } {
+  if (count === 0) return { label: `${count} commits`, className: 'bg-red-50 text-red-700' };
+  if (count >= 5) return { label: `${count} commits`, className: 'bg-green-50 text-green-700' };
+  return { label: `${count} commits`, className: 'bg-yellow-50 text-yellow-700' };
+}
 
 function getRollNumber(student: Student): string {
   return student.rollNumber ?? student.email.split('@')[0].toUpperCase();
@@ -75,6 +90,8 @@ export default function StudentsPage() {
   const [deleteAllLoading, setDeleteAllLoading] = useState(false);
   const [flash, setFlash] = useState<Flash | null>(null);
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
+  const [weeklyCommits, setWeeklyCommits] = useState<WeeklyCommit[]>([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
 
   const showFlash = (f: Flash) => {
     setFlash(f);
@@ -110,6 +127,21 @@ export default function StudentsPage() {
     }
     fetchStudents();
   }, []);
+
+  const openStudentDialog = async (student: Student) => {
+    setViewStudent(student);
+    setWeeklyCommits([]);
+    if (!student.githubUrl) return;
+    setCommitsLoading(true);
+    try {
+      const res = await api.get<WeeklyCommit[]>(`/github/student/${student.id}/commits`);
+      setWeeklyCommits(res.data);
+    } catch {
+      setWeeklyCommits([]);
+    } finally {
+      setCommitsLoading(false);
+    }
+  };
 
   const handleDelete = async (student: Student) => {
     if (!window.confirm(`Are you sure you want to delete ${student.name ?? student.email}? This action cannot be undone.`)) return;
@@ -372,7 +404,7 @@ export default function StudentsPage() {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => setViewStudent(student)}
+                        onClick={() => openStudentDialog(student)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                       >
                         View
@@ -471,6 +503,38 @@ export default function StudentsPage() {
                   )}
                 </div>
               </div>
+
+              {viewStudent.githubUrl && (
+                <div className="rounded-xl bg-gray-50 px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                    Weekly Commits
+                  </p>
+                  {commitsLoading ? (
+                    <p className="text-sm text-gray-400 italic">Loading…</p>
+                  ) : weeklyCommits.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No commit data yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {weeklyCommits.map((wc) => {
+                        const badge = commitBadge(wc.commitCount);
+                        return (
+                          <li key={wc.id} className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-gray-500">
+                              Week of{' '}
+                              {new Date(wc.weekStart).toLocaleDateString('en-US', {
+                                month: 'short', day: 'numeric',
+                              })}
+                            </span>
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end">
                 <button

@@ -7,8 +7,12 @@ import {
 import { Role, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { AuditActor, AuditService } from '../audit/audit.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ApproveMembersDto } from './dto/approve-members.dto';
+import * as path from 'path';
+import * as fs from 'fs';
+
 
 const TASK_INCLUDE = {
   group: {
@@ -25,13 +29,18 @@ const TASK_INCLUDE = {
   memberStatuses: {
     include: { user: { select: { id: true, name: true, email: true } } },
   },
+  submissions: {
+    include: { user: { select: { id: true, name: true, email: true } } },
+  },
 } as const;
+
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly auditService: AuditService,
   ) {}
 
   private getNextFridayDeadline(): Date {
@@ -75,7 +84,12 @@ export class TasksService {
     return group;
   }
 
-  async createTask(supervisorId: number, dto: CreateTaskDto) {
+  async createTask(
+    supervisorId: number,
+    dto: CreateTaskDto,
+    actor?: AuditActor | null,
+    ipAddress?: string | null,
+  ) {
     await this.assertSupervisorOwnsGroup(supervisorId, dto.groupId);
 
     const maxPerGroup = await this.getSetting('task_max_per_group', '16');
@@ -95,6 +109,17 @@ export class TasksService {
         deadline,
       },
       include: TASK_INCLUDE,
+    });
+
+    await this.auditService.log({
+      userId: actor?.id ?? supervisorId,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: 'TASK_ASSIGN',
+      entity: 'TASK',
+      entityId: task.id,
+      details: `Assigned task "${task.title}" to group ${task.group.fypId ?? `#${task.groupId}`}`,
+      ipAddress,
     });
 
     const [members, supervisor] = await Promise.all([
@@ -143,7 +168,13 @@ export class TasksService {
     return task;
   }
 
-  async approveMembers(supervisorId: number, taskId: number, dto: ApproveMembersDto) {
+  async approveMembers(
+    supervisorId: number,
+    taskId: number,
+    dto: ApproveMembersDto,
+    actor?: AuditActor | null,
+    ipAddress?: string | null,
+  ) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
       include: {
@@ -178,6 +209,17 @@ export class TasksService {
       data: { status: TaskStatus.APPROVED },
     });
 
+    await this.auditService.log({
+      userId: actor?.id ?? supervisorId,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: 'TASK_APPROVE',
+      entity: 'TASK',
+      entityId: taskId,
+      details: `Approved task "${task.title}"`,
+      ipAddress,
+    });
+
     const updated = await this.prisma.task.findUnique({
       where: { id: taskId },
       include: TASK_INCLUDE,
@@ -199,7 +241,81 @@ export class TasksService {
     return updated;
   }
 
+  async submitTask(
+    userId: number,
+    taskId: number,
+    file: Express.Multer.File,
+    description?: string,
+    githubLink?: string,
+  ) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        group: {
+          select: {
+            members: { select: { userId: true } },
+          },
+        },
+      },
+    });
+    if (!task) throw new NotFoundException(`Task #${taskId} not found`);
+    if (task.status !== TaskStatus.PENDING) {
+      throw new BadRequestException('Task is not in PENDING status');
+    }
+
+    const isMember = task.group.members.some((m) => m.userId === userId);
+    if (!isMember) {
+      throw new ForbiddenException('You are not a member of this task\'s group');
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'tasks');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const ext = path.extname(file.originalname);
+    const filename = `task-${taskId}-user-${userId}-${Date.now()}${ext}`;
+    const filePath = path.join(uploadsDir, filename);
+    fs.writeFileSync(filePath, file.buffer);
+
+    const fileUrl = `/uploads/tasks/${filename}`;
+
+    const submission = await this.prisma.taskSubmission.create({
+      data: {
+        taskId,
+        userId,
+        description: description ?? null,
+        fileUrl,
+        githubLink: githubLink?.trim() || null,
+      },
+    });
+
+    const totalMembers = task.group.members.length;
+    const submissionCount = await this.prisma.taskSubmission.count({
+      where: { taskId },
+    });
+
+    if (submissionCount >= totalMembers) {
+      await this.prisma.task.update({
+        where: { id: taskId },
+        data: { status: TaskStatus.SUBMITTED },
+      });
+    }
+
+
+    this.notificationService
+      .createMany(
+        [task.supervisorId],
+        'Task Submitted',
+        `A student has submitted task "${task.title}" for review`,
+        'TASK',
+        '/dashboard/supervisor/tasks',
+      )
+      .catch(() => {});
+
+    return submission;
+  }
+
   async getGroupScores(groupId: number) {
+
     const group = await this.prisma.group.findUnique({
       where: { id: groupId },
       select: {
@@ -263,24 +379,156 @@ export class TasksService {
   }
 
   async getTasksForStudent(userId: number) {
-    const enrollment = await this.prisma.enrollment.findFirst({
-      where: { userId },
-      select: { groupId: true },
-    });
-    if (!enrollment) return [];
+    const [enrollments, ledGroups] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { userId },
+        select: { groupId: true },
+      }),
+      this.prisma.group.findMany({
+        where: { leaderId: userId },
+        select: { id: true },
+      }),
+    ]);
+
+    const groupIds = new Set<number>();
+    enrollments.forEach((e) => groupIds.add(e.groupId));
+    ledGroups.forEach((g) => groupIds.add(g.id));
+
+    if (groupIds.size === 0) return [];
 
     return this.prisma.task.findMany({
-      where: { groupId: enrollment.groupId },
+      where: { groupId: { in: Array.from(groupIds) } },
       include: TASK_INCLUDE,
       orderBy: { deadline: 'asc' },
     });
   }
+
+
 
   getTasksForManager() {
     return this.prisma.task.findMany({
       include: TASK_INCLUDE,
       orderBy: { deadline: 'asc' },
     });
+  }
+
+  async getManagerSearch(query: string) {
+    const q = (query ?? '').trim();
+    if (!q) return [];
+
+    const supervisorPrefArgs = {
+      where: { preference: 1 },
+      include: { supervisor: { select: { id: true, name: true, email: true } } },
+    } as const;
+
+    const [matchingEnrollments, matchingGroups] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: {
+          user: {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { rollNumber: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        },
+        include: {
+          user: { select: { id: true, name: true, email: true, rollNumber: true } },
+          group: {
+            select: {
+              id: true,
+              fypId: true,
+              status: true,
+              proposal: { select: { projectTitle: true } },
+              preferences: supervisorPrefArgs,
+            },
+          },
+        },
+      }),
+      this.prisma.group.findMany({
+        where: { fypId: { contains: q, mode: 'insensitive' } },
+        select: {
+          id: true,
+          fypId: true,
+          status: true,
+          leader: { select: { id: true, name: true, email: true, rollNumber: true } },
+          proposal: { select: { projectTitle: true } },
+          preferences: supervisorPrefArgs,
+        },
+      }),
+    ]);
+
+    type SearchEntry = {
+      studentId: number;
+      studentName: string | null;
+      studentEmail: string;
+      rollNumber: string | null;
+      groupId: number;
+      fypId: string | null;
+      groupStatus: string;
+      supervisorName: string | null;
+      projectTitle: string | null;
+    };
+
+    const entries = new Map<string, SearchEntry>();
+
+    for (const e of matchingEnrollments) {
+      const key = `${e.group.id}-${e.user.id}`;
+      if (entries.has(key)) continue;
+      const supervisorPref = e.group.preferences[0];
+      entries.set(key, {
+        studentId: e.user.id,
+        studentName: e.user.name,
+        studentEmail: e.user.email,
+        rollNumber: e.user.rollNumber,
+        groupId: e.group.id,
+        fypId: e.group.fypId,
+        groupStatus: e.group.status,
+        supervisorName: supervisorPref?.supervisor.name ?? supervisorPref?.supervisor.email ?? null,
+        projectTitle: e.group.proposal?.projectTitle ?? null,
+      });
+    }
+
+    for (const g of matchingGroups) {
+      const key = `${g.id}-${g.leader.id}`;
+      if (entries.has(key)) continue;
+      const supervisorPref = g.preferences[0];
+      entries.set(key, {
+        studentId: g.leader.id,
+        studentName: g.leader.name,
+        studentEmail: g.leader.email,
+        rollNumber: g.leader.rollNumber,
+        groupId: g.id,
+        fypId: g.fypId,
+        groupStatus: g.status,
+        supervisorName: supervisorPref?.supervisor.name ?? supervisorPref?.supervisor.email ?? null,
+        projectTitle: g.proposal?.projectTitle ?? null,
+      });
+    }
+
+    const results = Array.from(entries.values());
+    if (results.length === 0) return [];
+
+    const groupIds = Array.from(new Set(results.map((r) => r.groupId)));
+    const tasks = await this.prisma.task.findMany({
+      where: { groupId: { in: groupIds } },
+      select: { groupId: true, status: true },
+    });
+
+    const statsByGroup = new Map<number, { total: number; pending: number; completed: number }>();
+    for (const gid of groupIds) {
+      statsByGroup.set(gid, { total: 0, pending: 0, completed: 0 });
+    }
+    for (const t of tasks) {
+      const stats = statsByGroup.get(t.groupId)!;
+      stats.total += 1;
+      if (t.status === TaskStatus.PENDING) stats.pending += 1;
+      if (t.status === TaskStatus.APPROVED) stats.completed += 1;
+    }
+
+    return results.map((r) => ({
+      ...r,
+      taskStats: statsByGroup.get(r.groupId) ?? { total: 0, pending: 0, completed: 0 },
+    }));
   }
 
   async getSupervisorSchedule(supervisorId: number) {

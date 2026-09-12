@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ToggleLeft, ToggleRight, GraduationCap, CalendarDays, Eye } from 'lucide-react';
+import { ToggleLeft, ToggleRight, GraduationCap, CalendarDays, Eye, Code2, KeyRound } from 'lucide-react';
 import api from '@/lib/api';
 
 const ACCENT = '#7C6FF7';
@@ -97,6 +97,18 @@ export default function SettingsPage() {
       icon: Eye,
       title: 'Show phase to students',
       description: 'Display the academic phase (FYP-1 / FYP-2) on the student group page.',
+    },
+    {
+      key: 'github_tracking_enabled',
+      icon: Code2,
+      title: 'GitHub Commit Tracking',
+      description: 'Run the weekly GitHub commit sync job for students with a linked profile.',
+    },
+    {
+      key: 'force_password_change',
+      icon: KeyRound,
+      title: 'Force First Login Password Change',
+      description: 'Require students and supervisors to set a new password on their first login.',
     },
   ];
 

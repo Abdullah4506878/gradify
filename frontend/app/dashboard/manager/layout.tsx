@@ -13,6 +13,7 @@ import {
   BarChart2,
   BookOpen,
   Settings,
+  Activity,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
@@ -27,6 +28,7 @@ const navItems = [
   { label: 'Tasks', href: '/dashboard/manager/tasks', icon: ClipboardList },
   { label: 'Proposals', href: '/dashboard/manager/proposals', icon: ClipboardCheck },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart },
+  { label: 'Audit Log', href: '/dashboard/manager/audit', icon: Activity },
   { label: 'Profile', href: '/dashboard/manager/profile', icon: User },
   { label: 'Settings', href: '/dashboard/manager/settings', icon: Settings },
 ];

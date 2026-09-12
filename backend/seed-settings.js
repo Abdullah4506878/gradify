@@ -13,6 +13,8 @@ const DEFAULTS = [
   { key: 'show_phase_to_students', value: 'true', label: 'Show FYP phase to students' },
   { key: 'task_total_marks', value: '15', label: 'Total task marks' },
   { key: 'task_max_per_group', value: '16', label: 'Maximum tasks per group' },
+  { key: 'github_tracking_enabled', value: 'true', label: 'Enable GitHub commit tracking' },
+  { key: 'force_password_change', value: 'true', label: 'Force password change on first login' },
 ];
 
 async function main() {

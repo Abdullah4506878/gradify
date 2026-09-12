@@ -11,6 +11,10 @@ import {
   ClipboardCheck,
   PlusCircle,
   Loader2,
+  ExternalLink,
+  Download,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,6 +61,16 @@ interface MemberStatus {
   user: GroupMember;
 }
 
+interface Submission {
+  id: number;
+  userId: number;
+  description?: string | null;
+  fileUrl?: string | null;
+  githubLink?: string | null;
+  createdAt: string;
+  user: GroupMember;
+}
+
 interface Task {
   id: number;
   title: string;
@@ -69,6 +83,7 @@ interface Task {
     members: GroupEnrollment[];
   };
   memberStatuses: MemberStatus[];
+  submissions: Submission[];
 }
 
 type Flash = { type: 'success' | 'error'; text: string };
@@ -310,12 +325,14 @@ export default function SupervisorTasksPage() {
                           type="button"
                           onClick={() => openDetailDialog(task)}
                           className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                            task.status === 'PENDING'
+                            task.status === 'SUBMITTED'
                               ? 'border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                               : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
                           }`}
                         >
-                          {task.status === 'PENDING' ? 'Approve Members' : 'View'}
+                          {task.status === 'SUBMITTED' ? 'Approve Members' : 'View'}
+
+
                         </button>
                       </td>
                     </tr>
@@ -410,12 +427,14 @@ export default function SupervisorTasksPage() {
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" showCloseButton>
           <DialogHeader>
             <DialogTitle>
-              {detailTask?.status === 'PENDING' ? 'Approve Members' : 'Task Details'}
+              {(detailTask?.status === 'PENDING' || detailTask?.status === 'SUBMITTED') ? 'Approve Members' : 'Task Details'}
+
             </DialogTitle>
           </DialogHeader>
           {detailTask && (() => {
             const status = STATUS_BADGES[detailTask.status] ?? STATUS_BADGES.PENDING;
-            const isPending = detailTask.status === 'PENDING';
+            const isPending = detailTask.status === 'PENDING' || detailTask.status === 'SUBMITTED';
+
 
             return (
               <div className="pt-2 space-y-4">
@@ -439,36 +458,79 @@ export default function SupervisorTasksPage() {
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <p className="text-sm font-semibold text-gray-700">Group Members</p>
                   {detailTask.group.members.map((enrollment) => {
                     const member = enrollment.user;
                     const isDone = memberToggles[enrollment.userId] ?? false;
+                    const submission = detailTask.submissions.find((s) => s.userId === enrollment.userId);
                     return (
                       <div
                         key={enrollment.userId}
-                        className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3"
+                        className="rounded-xl border border-gray-200 overflow-hidden"
                       >
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{member.name ?? member.email}</p>
-                          {member.name && <p className="text-xs text-gray-400">{member.email}</p>}
+                        <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{member.name ?? member.email}</p>
+                            {member.name && <p className="text-xs text-gray-400 truncate">{member.email}</p>}
+                          </div>
+                          {isPending ? (
+                            <button
+                              type="button"
+                              onClick={() => setMemberToggles((prev) => ({ ...prev, [enrollment.userId]: !prev[enrollment.userId] }))}
+                              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+                                isDone
+                                  ? 'bg-green-50 text-green-700 border-2 border-green-300 hover:bg-green-100 hover:border-green-400'
+                                  : 'bg-red-50 text-red-700 border-2 border-red-300 hover:bg-red-100 hover:border-red-400'
+                              }`}
+                            >
+                              {isDone ? (
+                                <><CheckCircle2 className="h-4 w-4" /> Done</>
+                              ) : (
+                                <><XCircle className="h-4 w-4" /> Not Done</>
+                              )}
+                            </button>
+                          ) : (
+                            <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${
+                              isDone ? 'bg-green-50 text-green-700 border-2 border-green-300' : 'bg-red-50 text-red-700 border-2 border-red-300'
+                            }`}>
+                              {isDone ? (
+                                <><CheckCircle2 className="h-4 w-4" /> Done</>
+                              ) : (
+                                <><XCircle className="h-4 w-4" /> Not Done</>
+                              )}
+                            </span>
+                          )}
                         </div>
-                        {isPending ? (
-                          <button
-                            type="button"
-                            onClick={() => setMemberToggles((prev) => ({ ...prev, [enrollment.userId]: !prev[enrollment.userId] }))}
-                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                              isDone ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
-                            }`}
-                          >
-                            {isDone ? 'Done ✅' : 'Not Done ❌'}
-                          </button>
+                        {submission ? (
+                          <div className="bg-gray-50 px-4 py-3 space-y-2">
+                            {submission.fileUrl && (
+                              <a
+                                href={`http://localhost:4000/uploads/${submission.fileUrl.replace('/uploads/', '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-lg bg-white border border-gray-200 px-3.5 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                              >
+                                <Download className="h-4 w-4" />
+                                Download File
+                              </a>
+                            )}
+                            {submission.githubLink && submission.githubLink.trim() !== '' && (
+                              <a
+                                href={submission.githubLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-lg bg-white border border-gray-200 px-3.5 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                View GitHub Link
+                              </a>
+                            )}
+                          </div>
                         ) : (
-                          <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                            isDone ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                          }`}>
-                            {isDone ? 'Done ✅' : 'Not Done ❌'}
-                          </span>
+                          <div className="bg-gray-50 px-4 py-3">
+                            <p className="text-sm text-gray-400 italic">Not submitted yet.</p>
+                          </div>
                         )}
                       </div>
                     );

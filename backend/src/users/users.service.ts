@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import { isEmail } from 'class-validator';
 import { parse } from 'csv-parse/sync';
+import { AuditActor, AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { FileUserRow, ImportUsersResult } from './dto/import-users.dto';
@@ -46,7 +47,10 @@ function detectCols(headers: string[]): Record<string, string | undefined> {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
@@ -58,6 +62,13 @@ export class UsersService {
 
   async updateRefreshToken(id: number, refreshToken: string | null): Promise<void> {
     await this.prisma.user.update({ where: { id }, data: { refreshToken } });
+  }
+
+  async changePassword(id: number, hashedPassword: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword, isFirstLogin: false },
+    });
   }
 
   async findAll(filters: { role?: Role; universityId?: number }) {
@@ -118,12 +129,25 @@ export class UsersService {
     return user;
   }
 
-  async createUser(dto: CreateUserDto) {
+  async createUser(dto: CreateUserDto, actor?: AuditActor | null, ipAddress?: string | null) {
     const hashed = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const { password: _, refreshToken: __, ...safe } = await this.prisma.user.create({
       data: { ...dto, password: hashed },
       include: { university: true },
     });
+
+    const role = dto.role ?? Role.STUDENT;
+    await this.auditService.log({
+      userId: actor?.id,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: role === Role.STUDENT ? 'STUDENT_ADDED' : role === Role.SUPERVISOR ? 'SUPERVISOR_ADDED' : 'USER_ADDED',
+      entity: 'USER',
+      entityId: safe.id,
+      details: `Added ${role.toLowerCase()} ${dto.email}`,
+      ipAddress,
+    });
+
     return safe;
   }
 
@@ -272,9 +296,23 @@ export class UsersService {
     return { added, updated, imported: added + updated, skipped, errors };
   }
 
-  async removeUser(id: number) {
-    await this.ensureExists(id);
+  async removeUser(id: number, actor?: AuditActor | null, ipAddress?: string | null) {
+    const target = await this.findById(id);
+    if (!target) throw new NotFoundException(`User #${id} not found`);
+
     await this.prisma.user.delete({ where: { id } });
+
+    await this.auditService.log({
+      userId: actor?.id,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: target.role === Role.STUDENT ? 'STUDENT_DELETED' : target.role === Role.SUPERVISOR ? 'SUPERVISOR_DELETED' : 'USER_DELETED',
+      entity: 'USER',
+      entityId: id,
+      details: `Removed ${target.role.toLowerCase()} ${target.email}`,
+      ipAddress,
+    });
+
     return { message: 'User removed successfully' };
   }
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,11 +7,17 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,7 +38,7 @@ export class TasksController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPERVISOR)
   create(@Req() req: AuthRequest, @Body() dto: CreateTaskDto) {
-    return this.tasksService.createTask(req.user.id, dto);
+    return this.tasksService.createTask(req.user.id, dto, req.user, req.ip);
   }
 
   @Patch(':id/approve-members')
@@ -42,7 +49,7 @@ export class TasksController {
     @Req() req: AuthRequest,
     @Body() dto: ApproveMembersDto,
   ) {
-    return this.tasksService.approveMembers(req.user.id, id, dto);
+    return this.tasksService.approveMembers(req.user.id, id, dto, req.user, req.ip);
   }
 
   @Get('supervisor/my-tasks')
@@ -66,11 +73,36 @@ export class TasksController {
     return this.tasksService.getTasksForManager();
   }
 
+  @Get('manager/search')
+  @UseGuards(RolesGuard)
+  @Roles(Role.MANAGER)
+  searchManager(@Query('q') q?: string) {
+    return this.tasksService.getManagerSearch(q ?? '');
+  }
+
   @Get('group/:groupId/scores')
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER, Role.SUPERVISOR)
   getGroupScores(@Param('groupId', ParseIntPipe) groupId: number) {
     return this.tasksService.getGroupScores(groupId);
+  }
+
+  @Post(':id/submit')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+    }),
+  )
+  async submitTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthRequest,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { description?: string; githubLink?: string },
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.tasksService.submitTask(req.user.id, id, file, body.description, body.githubLink);
   }
 
   @Get('supervisor/schedule')
@@ -80,3 +112,4 @@ export class TasksController {
     return this.tasksService.getSupervisorSchedule(req.user.id);
   }
 }
+

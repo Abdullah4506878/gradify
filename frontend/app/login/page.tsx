@@ -80,7 +80,11 @@ export default function LoginPage() {
       } catch { return null; }
     })();
     if (stored && storedUser?.role) {
-      router.replace(ROLE_REDIRECTS[storedUser.role] ?? '/dashboard');
+      if (storedUser.isFirstLogin && (storedUser.role === 'STUDENT' || storedUser.role === 'SUPERVISOR')) {
+        router.replace('/change-password');
+      } else {
+        router.replace(ROLE_REDIRECTS[storedUser.role] ?? '/dashboard');
+      }
     } else {
       setChecking(false);
     }
@@ -99,14 +103,19 @@ export default function LoginPage() {
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      const res = await api.post<{ accessToken: string; refreshToken: string }>(
+      const res = await api.post<{ accessToken: string; refreshToken: string; isFirstLogin: boolean }>(
         '/auth/login',
         { email: data.email, password: data.password, role: data.role },
       );
-      const { accessToken, refreshToken } = res.data;
+      const { accessToken, refreshToken, isFirstLogin } = res.data;
       const decoded = decodeToken(accessToken);
-      setAuth(accessToken, decoded, refreshToken);
-      router.replace(ROLE_REDIRECTS[decoded.role] ?? '/dashboard');
+      const authUser = { ...decoded, isFirstLogin };
+      setAuth(accessToken, authUser, refreshToken);
+      if (isFirstLogin && (decoded.role === 'STUDENT' || decoded.role === 'SUPERVISOR')) {
+        router.replace('/change-password');
+      } else {
+        router.replace(ROLE_REDIRECTS[decoded.role] ?? '/dashboard');
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setServerError(typeof msg === 'string' ? msg : 'Invalid email or password. Please try again.');

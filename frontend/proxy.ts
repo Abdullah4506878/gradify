@@ -26,8 +26,15 @@ export function proxy(request: NextRequest) {
   const payload = token ? decodeJwtPayload(token) : null;
   const role = payload?.role;
 
-  // Authenticated user visits /login or root → send to their dashboard
+  // Only STUDENT and SUPERVISOR are forced through the first-login password change
+  const firstLogin = request.cookies.get('first_login')?.value === '1';
+  const mustChangePassword = firstLogin && (role === 'STUDENT' || role === 'SUPERVISOR');
+
+  // Authenticated user visits /login or root → send to their dashboard (or forced flow)
   if ((pathname === '/login' || pathname === '/') && role) {
+    if (mustChangePassword) {
+      return NextResponse.redirect(new URL('/change-password', request.url));
+    }
     const dashboard = ROLE_DASHBOARDS[role];
     if (dashboard) {
       return NextResponse.redirect(new URL(dashboard, request.url));
@@ -39,10 +46,23 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard/admin', request.url));
   }
 
+  // /change-password just requires an authenticated session
+  if (pathname === '/change-password') {
+    if (!token || !role) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/dashboard')) {
     // No session → go to login
     if (!token || !role) {
       return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // First-login students/supervisors cannot skip the forced password change
+    if (mustChangePassword) {
+      return NextResponse.redirect(new URL('/change-password', request.url));
     }
 
     // SUPER_ADMIN can only access /dashboard/admin/*
@@ -69,5 +89,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/admin-login', '/'],
+  matcher: ['/dashboard/:path*', '/login', '/admin-login', '/change-password', '/'],
 };

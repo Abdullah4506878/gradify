@@ -14,5 +14,6 @@ export class CreateTaskDto {
   description?: string;
 
   @IsDateString()
-  deadline: string;
+  @IsOptional()
+  deadline?: string;
 }

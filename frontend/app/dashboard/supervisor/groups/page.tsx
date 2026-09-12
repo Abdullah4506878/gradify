@@ -12,6 +12,7 @@ import {
   PlusCircle,
   ClipboardCheck,
   ClipboardList,
+  Code2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -37,7 +38,7 @@ type GroupStatus = 'FORMING' | 'ACTIVE' | 'COMPLETED';
 interface Member {
   id: number;
   userId: number;
-  user: { id: number; name: string | null; email: string } | null;
+  user: { id: number; name: string | null; email: string; githubUrl?: string | null } | null;
 }
 
 interface Group {
@@ -51,6 +52,19 @@ interface MOM {
   id: number;
   groupId: number;
   meetingDate: string;
+}
+
+interface WeeklyCommit {
+  id: number;
+  userId: number;
+  weekStart: string;
+  commitCount: number;
+  lastCommit: string | null;
+  repos: string | null;
+}
+
+function formatCommitDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 const STATUS_STYLES: Record<GroupStatus, { label: string; className: string }> = {
@@ -81,6 +95,8 @@ export default function SupervisorGroupsPage() {
   const [search, setSearch] = useState('');
   const [viewGroup, setViewGroup] = useState<Group | null>(null);
   const [groupsHidden, setGroupsHidden] = useState(false);
+  const [memberCommits, setMemberCommits] = useState<Record<number, WeeklyCommit | null>>({});
+  const [commitsLoading, setCommitsLoading] = useState(false);
 
   useEffect(() => {
     api.get<Record<string, string>>('/settings/public')
@@ -118,6 +134,29 @@ export default function SupervisorGroupsPage() {
     }
     fetchData();
   }, []);
+
+  const openGroupDialog = async (group: Group) => {
+    setViewGroup(group);
+    const withGithub = group.members.filter((m) => m.user?.githubUrl);
+    if (withGithub.length === 0) return;
+
+    setCommitsLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        withGithub.map((m) => api.get<WeeklyCommit[]>(`/github/student/${m.user!.id}/commits`)),
+      );
+      setMemberCommits((prev) => {
+        const next = { ...prev };
+        withGithub.forEach((m, i) => {
+          const result = results[i];
+          next[m.user!.id] = result.status === 'fulfilled' ? (result.value.data[0] ?? null) : null;
+        });
+        return next;
+      });
+    } finally {
+      setCommitsLoading(false);
+    }
+  };
 
   const filtered = groups.filter((g) =>
     g.fypId.toLowerCase().includes(search.toLowerCase()),
@@ -245,7 +284,7 @@ export default function SupervisorGroupsPage() {
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
-                        onClick={() => setViewGroup(group)}
+                        onClick={() => openGroupDialog(group)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
                       >
                         View
@@ -288,21 +327,51 @@ export default function SupervisorGroupsPage() {
                     <p className="text-sm text-gray-400 italic">No members yet.</p>
                   ) : (
                     <ul className="space-y-2">
-                      {viewGroup.members.map((m) => (
-                        <li key={m.id} className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-50 shrink-0">
-                            <span className="text-xs font-semibold text-indigo-600">
-                              {(m.user?.name ?? m.user?.email ?? '?').charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-900">
-                              {m.user?.name ?? <span className="italic text-gray-400">No name</span>}
-                            </p>
-                            <p className="text-xs text-gray-400">{m.user?.email}</p>
-                          </div>
-                        </li>
-                      ))}
+                      {viewGroup.members.map((m) => {
+                        const commit = m.user ? memberCommits[m.user.id] : null;
+                        return (
+                          <li key={m.id} className="flex items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-50 shrink-0">
+                                <span className="text-xs font-semibold text-indigo-600">
+                                  {(m.user?.name ?? m.user?.email ?? '?').charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm text-gray-900 truncate">
+                                  {m.user?.name ?? <span className="italic text-gray-400">No name</span>}
+                                </p>
+                                <p className="text-xs text-gray-400 truncate">{m.user?.email}</p>
+                                {m.user?.githubUrl && (
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {commitsLoading ? (
+                                      'Loading commits…'
+                                    ) : (
+                                      <>
+                                        This week: {commit?.commitCount ?? 0} commits
+                                        {commit?.lastCommit && (
+                                          <> · Last commit {formatCommitDate(commit.lastCommit)}</>
+                                        )}
+                                      </>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            {m.user?.githubUrl && (
+                              <a
+                                href={m.user.githubUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-gray-400 hover:text-indigo-600 transition-colors shrink-0"
+                                aria-label="GitHub profile"
+                              >
+                                <Code2 className="h-4 w-4" strokeWidth={1.75} />
+                              </a>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Users, BookOpen, Calendar, TrendingUp } from 'lucide-react';
+import { Building2, Users, BookOpen, Calendar, TrendingUp, GraduationCap, Briefcase, FolderOpen, ClipboardList } from 'lucide-react';
 import api from '@/lib/api';
 
 const ACCENT = '#7C6FF7';
@@ -11,6 +11,11 @@ interface Stats {
   managers: number;
   programs: number;
   sessions: number;
+  totalStudents: number;
+  totalSupervisors: number;
+  totalGroups: number;
+  totalTasks: number;
+  totalProposals: number;
 }
 
 interface University {
@@ -55,7 +60,10 @@ function timeAgo(dateStr: string) {
 }
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<Stats>({ universities: 0, managers: 0, programs: 0, sessions: 0 });
+  const [stats, setStats] = useState<Stats>({
+    universities: 0, managers: 0, programs: 0, sessions: 0,
+    totalStudents: 0, totalSupervisors: 0, totalGroups: 0, totalTasks: 0, totalProposals: 0,
+  });
   const [universities, setUniversities] = useState<University[]>([]);
   const [managers, setManagers] = useState<Manager[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
@@ -80,6 +88,10 @@ export default function AdminDashboardPage() {
     { label: 'Active Managers', value: stats.managers, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
     { label: 'Programs', value: stats.programs, icon: BookOpen, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100' },
     { label: 'Active Sessions', value: stats.sessions, icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
+    { label: 'Total Students', value: stats.totalStudents, icon: GraduationCap, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+    { label: 'Total Supervisors', value: stats.totalSupervisors, icon: Briefcase, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-100' },
+    { label: 'Total Groups', value: stats.totalGroups, icon: FolderOpen, color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-cyan-100' },
+    { label: 'Total Tasks', value: stats.totalTasks, icon: ClipboardList, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
   ];
 
   const Skeleton = ({ className }: { className: string }) => (

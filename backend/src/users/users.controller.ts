@@ -84,8 +84,8 @@ export class UsersController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER)
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.createUser(dto);
+  create(@Req() req: AuthRequest, @Body() dto: CreateUserDto) {
+    return this.usersService.createUser(dto, req.user, req.ip);
   }
 
   @Patch('profile')
@@ -127,7 +127,7 @@ export class UsersController {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.MANAGER)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.removeUser(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Req() req: AuthRequest) {
+    return this.usersService.removeUser(id, req.user, req.ip);
   }
 }

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, Bell, Menu } from 'lucide-react';
+import { LogOut, Bell, Menu, X } from 'lucide-react';
 import Sidebar, { type NavItem } from './Sidebar';
 import { useAuthStore } from '@/lib/auth';
+import api from '@/lib/api';
 import {
   type Notification,
   fetchNotifications,
@@ -12,6 +13,15 @@ import {
   markAllNotificationsRead,
   timeAgo,
 } from '@/lib/notifications';
+
+interface Announcement {
+  id: number;
+  title: string;
+  message: string;
+  createdAt: string;
+}
+
+const DISMISSED_KEY = 'dismissedAnnouncements';
 import {
   Dialog,
   DialogContent,
@@ -81,6 +91,36 @@ export default function DashboardLayout({ children, navItems }: DashboardLayoutP
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const recent = notifications.slice(0, 5);
+
+  // ── Announcements ──
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    api.get<Announcement[]>('/announcements/active')
+      .then((res) => setAnnouncements(res.data))
+      .catch(() => {});
+    try {
+      const stored = localStorage.getItem(DISMISSED_KEY);
+      if (stored) setDismissedIds(JSON.parse(stored));
+    } catch {
+      // ignore malformed/unavailable storage
+    }
+  }, []);
+
+  const dismissAnnouncement = (id: number) => {
+    setDismissedIds((prev) => {
+      const next = [...prev, id];
+      try {
+        localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+      } catch {
+        // ignore storage failures — dismissal just won't persist
+      }
+      return next;
+    });
+  };
+
+  const visibleAnnouncements = announcements.filter((a) => !dismissedIds.includes(a.id));
 
   const handleMarkAllRead = async () => {
     await markAllNotificationsRead();
@@ -235,6 +275,32 @@ export default function DashboardLayout({ children, navItems }: DashboardLayoutP
             )}
           </div>
         </header>
+
+        {/* Announcements */}
+        {mounted && visibleAnnouncements.length > 0 && (
+          <div className="space-y-2 px-4 pt-4 sm:px-6">
+            {visibleAnnouncements.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
+              >
+                <Bell className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-amber-800">{a.title}</p>
+                  <p className="mt-0.5 text-sm text-amber-700">{a.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissAnnouncement(a.id)}
+                  className="shrink-0 text-amber-500 hover:text-amber-700 transition-colors"
+                  aria-label="Dismiss announcement"
+                >
+                  <X className="h-4 w-4" strokeWidth={1.75} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 p-4 sm:p-6">{children}</main>

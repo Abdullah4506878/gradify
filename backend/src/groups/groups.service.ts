@@ -10,12 +10,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { AdminService } from '../admin/admin.service';
 import { AcademicSessionService } from '../academic-session/academic-session.service';
+import { AuditActor, AuditService } from '../audit/audit.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { SupervisorPreferenceDto } from './dto/supervisor-preference.dto';
 
 const GROUP_INCLUDE = {
   leader: { select: { id: true, name: true, email: true, role: true } },
-  members: { include: { user: { select: { id: true, name: true, email: true, role: true } } } },
+  members: { include: { user: { select: { id: true, name: true, email: true, role: true, githubUrl: true } } } },
   preferences: { include: { supervisor: { select: { id: true, name: true, email: true } } }, orderBy: { preference: 'asc' as const } },
   phase: { include: { session: { include: { program: true } } } },
   invites: {
@@ -34,9 +35,16 @@ export class GroupsService {
     private readonly notificationService: NotificationService,
     private readonly adminService: AdminService,
     private readonly academicSessionService: AcademicSessionService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async create(leaderId: number, dto: CreateGroupDto, universityId: number) {
+  async create(
+    leaderId: number,
+    dto: CreateGroupDto,
+    universityId: number,
+    actor?: AuditActor | null,
+    ipAddress?: string | null,
+  ) {
     const session = await this.academicSessionService.getActiveSession();
     const fyp1Phase = session.phases.find((p) => p.phase === Phase.FYP_1);
     if (!fyp1Phase) {
@@ -51,6 +59,17 @@ export class GroupsService {
         members: { create: { userId: leaderId } },
       },
       include: GROUP_INCLUDE,
+    });
+
+    await this.auditService.log({
+      userId: actor?.id ?? leaderId,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: 'GROUP_CREATE',
+      entity: 'GROUP',
+      entityId: group.id,
+      details: `Created group ${group.fypId ?? `#${group.id}`}`,
+      ipAddress,
     });
 
     return group;
@@ -130,7 +149,12 @@ export class GroupsService {
     return invite;
   }
 
-  async acceptInvite(inviteId: number, userId: number) {
+  async acceptInvite(
+    inviteId: number,
+    userId: number,
+    actor?: AuditActor | null,
+    ipAddress?: string | null,
+  ) {
     const invite = await this.prisma.groupInvite.findUnique({
       where: { id: inviteId },
       include: {
@@ -171,6 +195,17 @@ export class GroupsService {
 
     await this.prisma.enrollment.create({ data: { userId, groupId: invite.groupId } });
     await this.prisma.groupInvite.update({ where: { id: inviteId }, data: { status: InviteStatus.ACCEPTED } });
+
+    await this.auditService.log({
+      userId: actor?.id ?? userId,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: 'GROUP_MEMBER_ADD',
+      entity: 'GROUP',
+      entityId: invite.groupId,
+      details: `Joined group ${group.fypId ?? `#${group.id}`} via invite`,
+      ipAddress,
+    });
 
     this.notificationService.createNotification(
       group.leaderId,
@@ -399,6 +434,8 @@ export class GroupsService {
       newLeaderId?: number;
       newSupervisorId?: number;
     },
+    actor?: AuditActor | null,
+    ipAddress?: string | null,
   ) {
     const group = await this.findOne(groupId);
 
@@ -415,6 +452,17 @@ export class GroupsService {
       if (group.members.length >= 3) throw new BadRequestException('Group already has the maximum of 3 members');
 
       await this.prisma.enrollment.create({ data: { userId: user.id, groupId } });
+
+      await this.auditService.log({
+        userId: actor?.id,
+        userEmail: actor?.email,
+        role: actor?.role,
+        action: 'GROUP_MEMBER_ADD',
+        entity: 'GROUP',
+        entityId: groupId,
+        details: `Added ${data.addMemberEmail} to group ${group.fypId ?? `#${groupId}`}`,
+        ipAddress,
+      });
     }
 
     if (data.removeMemberId !== undefined) {
@@ -426,6 +474,17 @@ export class GroupsService {
       });
       if (!enrollment) throw new NotFoundException('Member not found in this group');
       await this.prisma.enrollment.delete({ where: { id: enrollment.id } });
+
+      await this.auditService.log({
+        userId: actor?.id,
+        userEmail: actor?.email,
+        role: actor?.role,
+        action: 'GROUP_MEMBER_REMOVE',
+        entity: 'GROUP',
+        entityId: groupId,
+        details: `Removed user #${data.removeMemberId} from group ${group.fypId ?? `#${groupId}`}`,
+        ipAddress,
+      });
     }
 
     if (data.newLeaderId !== undefined) {
@@ -445,12 +504,24 @@ export class GroupsService {
     return this.findOne(groupId);
   }
 
-  async managerDeleteGroup(groupId: number) {
-    await this.findOne(groupId);
+  async managerDeleteGroup(groupId: number, actor?: AuditActor | null, ipAddress?: string | null) {
+    const group = await this.findOne(groupId);
     await this.prisma.groupInvite.deleteMany({ where: { groupId } });
     await this.prisma.supervisorPreference.deleteMany({ where: { groupId } });
     await this.prisma.enrollment.deleteMany({ where: { groupId } });
     await this.prisma.group.delete({ where: { id: groupId } });
+
+    await this.auditService.log({
+      userId: actor?.id,
+      userEmail: actor?.email,
+      role: actor?.role,
+      action: 'GROUP_DELETE',
+      entity: 'GROUP',
+      entityId: groupId,
+      details: `Deleted group ${group.fypId ?? `#${groupId}`}`,
+      ipAddress,
+    });
+
     return { message: 'Group deleted successfully' };
   }
 
